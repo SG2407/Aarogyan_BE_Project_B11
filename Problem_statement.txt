@@ -1,0 +1,369 @@
+Aarogyan — Problem Statement, Features & App Flow
+
+Problem Statement
+Healthcare accessibility and health literacy remain critical challenges, particularly in developing economies like India. A large segment of the population — including the general public, elderly individuals, and those managing chronic conditions — faces significant barriers: delayed access to doctors, inability to interpret complex medical documents, and negligible infrastructure for mental and emotional well-being.
+Elderly patients frequently struggle to understand prescriptions and test reports written in clinical terminology. Chronic illness patients require ongoing, context-aware guidance between medical appointments. Across all demographics, the absence of a trusted, always-available health companion results in poor precautionary behaviour and avoidable health deterioration.
+A critical but often overlooked problem is the lack of structured systems for patients to track their medical consultations over time. Patients lose prescriptions, forget medication changes, and cannot clearly communicate their treatment history across multiple doctor visits — leading to inefficient consultations, repeated tests, and fragmented continuity of care.
+Aarogyan (meaning "health" in Sanskrit) is a cross-platform mobile application designed to bridge this gap. It is a precautionary and assistive platform — not a diagnostic or prescriptive tool — providing personalised AI-driven medical assistance, intelligent document comprehension, empathetic emotional support, longitudinal mental health tracking, and a Consultation Tracker that enables users to maintain a structured, session-wise record of their entire medical journey.
+The Medical Assistant is a persistent, conversation-based AI health companion. Users can have natural, multi-turn health conversations that are automatically saved after each session. All past conversations are accessible from a conversation history panel, where users can revisit, continue, or delete any previous chat. Every time the user opens the Medical Assistant feature, a fresh conversation is initiated by default — ensuring each health query begins in a clean, uncluttered context — while all prior conversations remain accessible and continuable at any time.
+The application is built with a Flutter and Dart frontend delivering a modern, non-generic visual design language with fluid transitions and smooth animations — including elderly-friendly interaction patterns. The frontend communicates with a FastAPI (Python) backend over a secure API, with all structured data and file storage managed through Supabase. The frontend and backend are developed as separate, independently deployable systems.
+
+Features to be Implemented
+1. Consultation Tracker (Core New Feature)
+
+Create named consultations representing distinct treatment episodes (e.g., "Skin Allergy Treatment — June 2025")
+Add multiple doctor visit sessions under each consultation
+Maintain a chronological timeline view of all sessions within a consultation
+Record per-session data: date, symptoms, diagnosis, medications, and doctor notes
+Upload and manage prescriptions and medical documents per session (PDF, JPG, PNG; max 2 MB per file)
+Export a complete consultation history — including all session data and embedded documents — as a downloadable, shareable PDF
+
+2. Medical Assistant
+
+Conversation-based AI chat where every feature entry opens a fresh new chat by default
+Full conversation history panel listing all past chats with title, date, and preview snippet
+Users can revisit, continue chatting in, or permanently delete any past conversation
+Each active conversation maintains its full message history as context for the AI
+User medical profile passed as persistent background context across all conversations
+Strictly non-prescriptive and non-diagnostic; operates as a precautionary health information assistant
+Every conversation auto-saved after each exchange
+
+3. Document Summarisation
+
+Upload prescriptions, lab reports, or scan documents
+Automatic OCR-based text extraction followed by plain-language AI summarisation
+Identification of medicines, dosages, and key instructions from extracted text
+
+4. Emotional Buddy (Orbz)
+
+Animated AI companion providing empathetic, voice-based emotional support
+Conversational interaction centred around the user's current emotional state
+Session data aggregated to surface longitudinal mental health trends
+
+5. Mental Health Tracker
+
+Visual dashboard surfacing mood and emotional well-being trends over time
+Data derived from Emotional Buddy interactions
+Chart-based representation of longitudinal patterns
+
+
+
+App Flow
+1. Onboarding & Authentication
+
+App Launch
+    │
+    ├── New User
+    │       ├── Splash Screen → Welcome / Intro Screens
+    │       ├── Sign Up (Name, Email, Password)
+    │       ├── Medical Profile Setup
+    │       │       ├── Age, Gender, Blood Group
+    │       │       ├── Known Conditions / Allergies
+    │       │       └── Current Medications (optional)
+    │       └── → Home Dashboard
+    │
+    └── Returning User
+            ├── Splash Screen
+            ├── Login (Email / Password)
+            └── → Home Dashboard
+
+
+2. Home Dashboard
+
+Home Dashboard
+    │
+    ├── Consultation Tracker
+    ├── Medical Assistant
+    ├── Document Summarisation
+    ├── Emotional Buddy (Orbz)
+    └── Mental Health Tracker
+
+
+3. Consultation Tracker Flow
+
+Consultation Tracker Home
+    │
+    ├── View All Consultations (list / card view)
+    │
+    ├── Create New Consultation
+    │       ├── Enter Consultation Name
+    │       ├── Set Start Date
+    │       └── → Consultation Detail Page
+    │
+    └── Open Existing Consultation
+            │
+            └── Consultation Detail Page
+                    │
+                    ├── Timeline View (all sessions, chronological)
+                    │
+                    ├── Add New Session
+                    │       ├── Date of Visit
+                    │       ├── Symptoms
+                    │       ├── Diagnosis
+                    │       ├── Medications
+                    │       ├── Doctor Notes
+                    │       └── Upload Files (Prescription / Report)
+                    │               ├── PDF / JPG / PNG
+                    │               └── Max 2 MB per file
+                    │
+                    ├── View / Edit Existing Session
+                    │       ├── View all session fields
+                    │       ├── View uploaded documents
+                    │       └── Edit any field or add more files
+                    │
+                    └── Export as PDF
+                            ├── Generates full consultation report
+                            ├── Includes all sessions + embedded documents
+                            └── Download / Share
+
+
+4. Medical Assistant Flow
+
+Medical Assistant Entry Point
+    │
+    ├── Opens automatically to a New Chat
+    │       └── Clean slate — no previous messages shown
+    │
+    ├── Conversation History Panel (accessible via icon / drawer)
+    │       │
+    │       ├── List of all past conversations
+    │       │       └── Shown with title / date / preview snippet
+    │       │
+    │       ├── Tap any past conversation
+    │       │       └── Opens full chat history
+    │       │               ├── User can read through it
+    │       │               └── User can continue chatting in it
+    │       │
+    │       └── Delete a conversation
+    │               └── Permanently removes chat from history
+    │
+    ├── Active Chat (New or Continued)
+    │       │
+    │       ├── User types a health query
+    │       │
+    │       ├── Backend sends query + full conversation history
+    │       │       + user medical profile → AI model
+    │       │
+    │       ├── AI responds (precautionary, non-diagnostic)
+    │       │
+    │       ├── Response displayed in chat
+    │       │
+    │       └── Conversation auto-saved after every exchange
+    │
+    └── Exit / Navigate Away
+            └── Conversation saved and accessible in history
+
+
+5. Document Summarisation Flow
+
+Document Summarisation
+    │
+    ├── User uploads document
+    │       └── PDF / JPG / PNG (prescription, lab report, scan)
+    │
+    ├── File sent to backend
+    │
+    ├── OCR extracts raw text from document
+    │
+    ├── Extracted text sent to AI model
+    │
+    ├── AI generates plain-language summary
+    │       ├── Key medicines & dosages identified
+    │       ├── Instructions highlighted
+    │       └── Medical jargon simplified
+    │
+    └── Summary displayed to user
+
+
+6. Emotional Buddy (Orbz) Flow
+
+Emotional Buddy
+    │
+    ├── Orbz animated companion appears
+    │
+    ├── User initiates voice / text interaction
+    │
+    ├── Orbz asks about current emotional state
+    │
+    ├── User responds → AI processes empathetically
+    │
+    ├── Orbz replies with supportive, non-clinical response
+    │
+    ├── Session mood data recorded
+    │       └── Stored against date/time in Supabase
+    │
+    └── Session ends → data feeds into Mental Health Tracker
+
+
+7. Mental Health Tracker Flow
+
+Mental Health Tracker
+    │
+    ├── Dashboard loads mood data from past Orbz sessions
+    │
+    ├── Visual charts rendered
+    │       ├── Weekly mood trend
+    │       ├── Monthly overview
+    │       └── Notable patterns / highlights
+    │
+    └── User can tap on a data point
+            └── View that day's Orbz session summary
+
+
+8. Profile & Settings Flow
+
+Profile
+    │
+    ├── View / Edit Medical Profile
+    │       ├── Personal info
+    │       ├── Conditions, allergies, medications
+    │       └── Saved changes reflect in AI context immediately
+    │
+    └── Settings
+            ├── Notification preferences
+            ├── Theme / Accessibility options
+            └── Logout
+
+
+Overall Navigation Structure
+
+Bottom Navigation Bar
+    │
+    ├── Home
+    ├── Consultation Tracker
+    ├── Medical Assistant
+    ├── Emotional Buddy
+    └── Profile
+
+    (Document Summarisation & Mental Health Tracker
+     accessible from Home Dashboard cards)
+
+    
+
+
+Aarogyan — User Profile Fields Specification
+
+Section 1: Personal Information
+Fields:
+  - full_name               | Required    | Text input
+  - date_of_birth           | Required    | Date picker
+  - biological_sex          | Required    | Options: Male, Female, Intersex
+  - height_cm               | Required    | Numeric input (cm)
+  - weight_kg               | Required    | Numeric input (kg)
+  - blood_group             | Recommended | Options: A+, A−, B+, B−, AB+, AB−, O+, O−, Unknown
+  - city                    | Optional    | Text input
+  - region_state            | Optional    | Text input
+  - preferred_language      | Optional    | Options: English, Hindi, Marathi (expandable)
+  - emergency_contact_name  | Recommended | Text input
+  - emergency_contact_phone | Recommended | Phone input
+
+Section 2: Existing Conditions
+Type: List (user can add multiple entries)
+
+Each entry:
+  - condition_name    | Required  | Text input / searchable dropdown
+  - severity          | Optional  | Options: Mild, Moderate, Severe, Well-Controlled, Uncontrolled
+  - diagnosed_year    | Optional  | Year picker
+
+Section 3: Allergies
+Type: List (user can add multiple entries)
+
+Each entry:
+  - allergy_type  | Required  | Options: Drug, Food, Environmental, Material/Contact
+  - allergy_name  | Required  | Text input (e.g., Penicillin, Peanuts, Dust)
+  - reaction      | Optional  | Text input (e.g., Rash, Anaphylaxis, GI Upset)
+  - severity      | Optional  | Options: Mild, Moderate, Severe, Anaphylactic
+
+Section 4: Current Medications
+Type: List (user can add multiple entries)
+
+Each entry:
+  - medication_name | Required  | Text input (generic or brand name)
+  - dosage          | Required  | Text input (e.g., 500mg)
+  - frequency       | Required  | Options: Once Daily, Twice Daily, Thrice Daily, Weekly, As Needed, Other
+  - route           | Optional  | Options: Oral, Topical, Inhaled, Injected, Other
+  - prescribed_for  | Optional  | Text input (condition this medication is for)
+
+Section 5: Supplements & OTC Medications
+Type: List (user can add multiple entries)
+
+Each entry:
+  - supplement_name | Required  | Text input (e.g., Vitamin D3, Ashwagandha)
+  - dosage          | Optional  | Text input
+  - frequency       | Optional  | Options: Daily, Weekly, Occasionally, As Needed
+  - type            | Optional  | Options: Vitamin/Mineral, Herbal, OTC Medicine, Other
+
+Section 6: Past Medical History
+Type: List (user can add multiple entries)
+
+Each entry:
+  - history_type      | Required  | Options: Surgery, Hospitalisation, Illness, Injury, Blood Transfusion
+  - description       | Required  | Text input (e.g., Appendectomy, Dengue Fever)
+  - approximate_year  | Optional  | Year picker
+  - notes             | Optional  | Text area
+
+Section 7: Family Medical History
+Type: List (user can add multiple entries)
+
+Each entry:
+  - condition_name  | Required  | Text input / searchable dropdown
+  - relation        | Required  | Options: Father, Mother, Sibling, Paternal Grandfather,
+                                           Paternal Grandmother, Maternal Grandfather,
+                                           Maternal Grandmother, Other
+
+Section 8: Lifestyle & Wellness
+Fields:
+  - activity_level        | Optional | Options: Sedentary, Lightly Active, Moderately Active, Highly Active
+  - exercise_type         | Optional | Text input (e.g., Walking, Gym, Yoga)
+  - exercise_frequency    | Optional | Options: Rarely, 1–2x/week, 3–4x/week, 5+/week
+
+  - dietary_preference    | Optional | Options: Vegetarian, Vegan, Non-Vegetarian, Pescatarian, Other
+  - dietary_restrictions  | Optional | Text input (e.g., Gluten-Free, Low Sodium, Diabetic Diet)
+  - eating_pattern        | Optional | Options: Regular Meals, Irregular, Intermittent Fasting
+
+  - avg_sleep_hours       | Optional | Numeric input
+  - sleep_issues          | Optional | Text input (e.g., Insomnia, Sleep Apnea)
+
+  - smoking_status        | Optional | Options: Never, Former Smoker, Current Smoker
+  - smoking_frequency     | Conditional (if Current Smoker) | Options: Occasional, Daily
+  - alcohol_consumption   | Optional | Options: None, Occasional, Moderate, Heavy
+  - tobacco_use           | Optional | Toggle (Yes / No)
+
+  - stress_level          | Optional | Options: Low, Moderate, High, Chronic
+
+Section 9: Mental Health
+Fields:
+  - diagnosed_conditions  | Optional | Text input (e.g., Anxiety, Depression, OCD)
+  - current_medications   | Optional | Text input (mental health specific medications)
+  - in_therapy            | Optional | Toggle (Yes / No)
+
+Implementation Notes for the Coding Agent
+1. Section 1 is collected during onboarding (mandatory fields first,
+   recommended and optional fields can be skipped and filled later).
+
+2. Sections 2–9 are presented after signup as a multi-step
+   profile setup, clearly marked as optional but encouraged.
+   User must be able to skip any section and return to it later.
+
+3. All list-type sections (Sections 2–7) must support:
+      - Add new entry
+      - Edit existing entry
+      - Delete entry
+
+4. Section 8 field smoking_frequency must be conditionally 
+   rendered only when smoking_status === 'Current Smoker'.
+
+5. All fields across all sections must be editable at any 
+   time from the Profile screen.
+
+6. BMI must be auto-calculated and displayed wherever height 
+   and weight are shown:
+      BMI = weight_kg / (height_m)^2
+
+7. The entire profile object is serialised and passed as 
+   structured context to the AI model at the start of every 
+   Medical Assistant conversation.
+
+8. Data collection UI must be clean, non-clinical in tone,
+   and use simple conversational labels — avoid intimidating 
+   medical jargon in the interface itself.
