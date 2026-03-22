@@ -81,14 +81,13 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Set Up Your Profile'),
         actions: [
           TextButton(
             onPressed: () => context.go('/home'),
-            child: const Text('Skip',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child: Text('Skip',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5))),
           ),
         ],
       ),
@@ -166,7 +165,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.secondary,
+        color: Theme.of(context).colorScheme.secondary,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -204,7 +203,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
           lastDate: DateTime.now(),
           builder: (ctx, child) => Theme(
             data: Theme.of(ctx).copyWith(
-              colorScheme: const ColorScheme.light(primary: AppColors.primary),
+              colorScheme: Theme.of(ctx).colorScheme.copyWith(
+                  primary: AppColors.primary),
             ),
             child: child!,
           ),

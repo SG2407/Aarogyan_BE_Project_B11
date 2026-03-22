@@ -51,7 +51,6 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     final isLoading = ref.watch(authNotifierProvider).isLoading;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         leading: IconButton(

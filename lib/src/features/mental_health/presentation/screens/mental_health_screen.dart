@@ -12,7 +12,6 @@ class MentalHealthScreen extends ConsumerWidget {
     final dashboardAsync = ref.watch(mentalHealthDashboardProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Mental Health'),
         actions: [
@@ -107,7 +106,7 @@ class _Dashboard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.secondary,
+            color: Theme.of(context).colorScheme.secondary,
             borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
@@ -156,7 +155,7 @@ class _MoodChart extends StatelessWidget {
       height: 160,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
       ),
       child: LineChart(
@@ -166,7 +165,7 @@ class _MoodChart extends StatelessWidget {
           gridData: FlGridData(
             show: true,
             getDrawingHorizontalLine: (_) =>
-                FlLine(color: AppColors.secondary, strokeWidth: 1),
+                FlLine(color: Theme.of(context).colorScheme.secondary, strokeWidth: 1),
             drawVerticalLine: false,
           ),
           titlesData: FlTitlesData(
@@ -177,8 +176,8 @@ class _MoodChart extends StatelessWidget {
                 reservedSize: 28,
                 getTitlesWidget: (v, meta) => Text(
                   v.toInt().toString(),
-                  style: const TextStyle(
-                      fontSize: 10, color: AppColors.textSecondary),
+                  style: TextStyle(
+                      fontSize: 10, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
                 ),
               ),
             ),
@@ -198,8 +197,8 @@ class _MoodChart extends StatelessWidget {
                       ? label.substring(label.length - 5)
                       : label;
                   return Text(short,
-                      style: const TextStyle(
-                          fontSize: 9, color: AppColors.textSecondary));
+                      style: TextStyle(
+                          fontSize: 9, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)));
                 },
               ),
             ),
@@ -246,7 +245,7 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -256,7 +255,7 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(value,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: color ?? AppColors.textPrimary,
+                    color: color ?? Theme.of(context).colorScheme.onSurface,
                     fontWeight: FontWeight.w700,
                   )),
           Text(label, style: Theme.of(context).textTheme.bodyMedium),
@@ -344,7 +343,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           children: [
             Icon(Icons.self_improvement_rounded,
-                size: 64, color: AppColors.textSecondary),
+                size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text('No data yet',
                 style: Theme.of(context).textTheme.headlineSmall),

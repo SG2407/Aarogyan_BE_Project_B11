@@ -138,7 +138,6 @@ class BuddyScreen extends ConsumerWidget {
     final notifier = ref.read(buddyNotifierProvider.notifier);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Orbz — Emotional Buddy')),
       body: SafeArea(
         child: Padding(
@@ -197,7 +196,7 @@ class BuddyScreen extends ConsumerWidget {
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium
-                    ?.copyWith(color: AppColors.textSecondary),
+                    ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -224,7 +223,7 @@ class _OrbzAvatar extends StatelessWidget {
       height: isActive ? 160 : 140,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isActive ? AppColors.primary : AppColors.secondary,
+        color: isActive ? AppColors.primary : Theme.of(context).colorScheme.secondary,
         boxShadow: isActive
             ? [
                 BoxShadow(
@@ -337,7 +336,7 @@ class _MoodBar extends StatelessWidget {
           child: LinearProgressIndicator(
             value: (score - 1) / 9,
             minHeight: 8,
-            backgroundColor: AppColors.secondary,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
             valueColor: AlwaysStoppedAnimation<Color>(_moodColor()),
           ),
         ),
@@ -356,7 +355,7 @@ class _ReplyBubble extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -437,8 +436,8 @@ class _ActionButton extends StatelessWidget {
     return Container(
       width: 80,
       height: 80,
-      decoration: const BoxDecoration(
-        color: AppColors.secondary,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.secondary,
         shape: BoxShape.circle,
       ),
       child: const Padding(

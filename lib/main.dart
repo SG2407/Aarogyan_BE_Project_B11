@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'src/core/router/app_router.dart';
 import 'src/core/theme/app_theme.dart';
+import 'src/core/theme/theme_provider.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: AarogyanApp()));
+  final container = ProviderContainer();
+  await container.read(themeModeProvider.notifier).init();
+  runApp(UncontrolledProviderScope(container: container, child: const AarogyanApp()));
 }
 
 class AarogyanApp extends ConsumerWidget {
@@ -14,9 +17,12 @@ class AarogyanApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    final themeMode = ref.watch(themeModeProvider);
     return MaterialApp.router(
       title: 'Aarogyan',
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
     );

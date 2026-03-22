@@ -17,7 +17,6 @@ class ConsultationDetailScreen extends ConsumerWidget {
     final sessionsAsync = ref.watch(sessionsProvider(consultationId));
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: consultationAsync.maybeWhen(
           data: (c) => Text(c['name'] ?? 'Consultation'),
@@ -108,9 +107,9 @@ class ConsultationDetailScreen extends ConsumerWidget {
         minChildSize: 0.5,
         maxChildSize: 0.95,
         builder: (_, scrollCtrl) => Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: Theme.of(ctx).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: ListView(
             controller: scrollCtrl,
@@ -208,7 +207,8 @@ class _DatePickerFieldState extends State<_DatePickerField> {
           lastDate: DateTime.now(),
           builder: (ctx, child) => Theme(
             data: Theme.of(ctx).copyWith(
-              colorScheme: const ColorScheme.light(primary: AppColors.primary),
+              colorScheme: Theme.of(ctx).colorScheme.copyWith(
+                  primary: AppColors.primary),
             ),
             child: child!,
           ),
@@ -236,7 +236,7 @@ class _SessionTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: onTap,
@@ -249,7 +249,7 @@ class _SessionTile extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: AppColors.secondary,
+                    color: Theme.of(context).colorScheme.secondary,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
@@ -285,8 +285,8 @@ class _SessionTile extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.attach_file_rounded,
-                                size: 14, color: AppColors.textSecondary),
+                            Icon(Icons.attach_file_rounded,
+                                size: 14, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
                             const SizedBox(width: 4),
                             Text('$docs document${docs > 1 ? 's' : ''}',
                                 style: Theme.of(context)
@@ -299,8 +299,8 @@ class _SessionTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.arrow_forward_ios_rounded,
-                    size: 14, color: AppColors.textSecondary),
+                Icon(Icons.arrow_forward_ios_rounded,
+                    size: 14, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
               ],
             ),
           ),
@@ -322,8 +322,8 @@ class _EmptySessionsState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.event_note_rounded,
-                size: 64, color: AppColors.textSecondary),
+            Icon(Icons.event_note_rounded,
+                size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text('No sessions yet',
                 style: Theme.of(context).textTheme.headlineSmall),

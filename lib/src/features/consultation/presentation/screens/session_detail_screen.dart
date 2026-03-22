@@ -135,7 +135,6 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
         final docs = (session['session_documents'] as List?) ?? [];
 
         return Scaffold(
-          backgroundColor: AppColors.background,
           appBar: AppBar(
             title: Text('Session ${idx + 1}'),
             actions: [
@@ -255,7 +254,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
                     style: Theme.of(context)
                         .textTheme
                         .bodyMedium
-                        ?.copyWith(color: AppColors.textSecondary),
+                        ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
                   ),
                 )
               else
@@ -279,7 +278,7 @@ class _SectionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -324,7 +323,7 @@ class _TextView extends StatelessWidget {
           style: Theme.of(context)
               .textTheme
               .bodyMedium
-              ?.copyWith(color: AppColors.textSecondary));
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)));
     }
     return Text(text!, style: Theme.of(context).textTheme.bodyLarge);
   }
@@ -340,7 +339,7 @@ class _DocTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.secondary,
+        color: Theme.of(context).colorScheme.secondary,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -402,7 +401,8 @@ class _DatePickerFieldState extends State<_DatePickerField> {
           lastDate: DateTime.now(),
           builder: (ctx, child) => Theme(
             data: Theme.of(ctx).copyWith(
-              colorScheme: const ColorScheme.light(primary: AppColors.primary),
+              colorScheme: Theme.of(ctx).colorScheme.copyWith(
+                  primary: AppColors.primary),
             ),
             child: child!,
           ),

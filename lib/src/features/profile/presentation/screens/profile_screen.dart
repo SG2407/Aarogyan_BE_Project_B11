@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/theme_provider.dart';
 import '../../data/profile_repository.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../../../shared/widgets/section_header.dart';
+import '../../../auth/presentation/auth_notifier.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -244,8 +246,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('My Profile')),
+      appBar: AppBar(
+        title: const Text('My Profile'),
+        actions: [
+          Consumer(
+            builder: (context, ref, _) {
+              final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;
+              return IconButton(
+                tooltip: isDark ? 'Switch to Light' : 'Switch to Dark',
+                icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+                onPressed: () => ref.read(themeModeProvider.notifier).toggle(),
+              );
+            },
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -388,10 +403,44 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             label: _saving ? 'Saving...' : 'Save Profile',
             onPressed: _saving ? null : _save,
           ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout, color: Colors.red),
+            label: const Text('Log Out', style: TextStyle(color: Colors.red)),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.red),
+              minimumSize: const Size.fromHeight(48),
+            ),
+          ),
           const SizedBox(height: 24),
         ],
       ),
     );
+  }
+
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Log Out'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ref.read(authNotifierProvider.notifier).logout();
+    }
   }
 }
 
@@ -450,7 +499,7 @@ class _DateFieldState extends State<_DateField> {
           lastDate: DateTime.now(),
           builder: (ctx, child) => Theme(
             data: Theme.of(ctx).copyWith(
-              colorScheme: const ColorScheme.light(primary: AppColors.primary),
+              colorScheme: Theme.of(ctx).colorScheme.copyWith(primary: AppColors.primary),
             ),
             child: child!,
           ),

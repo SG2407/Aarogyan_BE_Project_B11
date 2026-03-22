@@ -37,7 +37,6 @@ class DocumentScreen extends ConsumerWidget {
     final loading = ref.watch(_loadingProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Document Scanner')),
       body: result == null
           ? _UploadPrompt(
@@ -143,8 +142,8 @@ class _UploadPrompt extends StatelessWidget {
             Container(
               width: 100,
               height: 100,
-              decoration: const BoxDecoration(
-                color: AppColors.secondary,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondary,
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.document_scanner_rounded,
@@ -189,7 +188,7 @@ class _UploadPrompt extends StatelessWidget {
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium
-                    ?.copyWith(color: AppColors.textSecondary),
+                    ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
               ),
           ],
         ),
@@ -329,7 +328,7 @@ class _ResultView extends StatelessWidget {
               Text(
                 'Reflects how clearly the document text was extracted by OCR.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
               ),
             ],
@@ -407,7 +406,7 @@ class _Card extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(

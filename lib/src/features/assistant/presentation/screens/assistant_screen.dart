@@ -12,7 +12,6 @@ class AssistantScreen extends ConsumerWidget {
     final conversations = ref.watch(conversationsListProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Health Assistant')),
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.primary,
@@ -76,7 +75,7 @@ class _ConversationTile extends StatelessWidget {
     final date = conversation['created_at'] as String?;
 
     return Material(
-      color: AppColors.surface,
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         onTap: onTap,
@@ -89,7 +88,7 @@ class _ConversationTile extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.secondary,
+                  color: Theme.of(context).colorScheme.secondary,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.chat_bubble_outline_rounded,

@@ -13,7 +13,6 @@ class ConsultationsScreen extends ConsumerWidget {
     final consultationsAsync = ref.watch(consultationsListProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Consultations')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCreateDialog(context, ref),
@@ -60,9 +59,9 @@ class ConsultationsScreen extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: Theme.of(ctx).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           padding: EdgeInsets.only(
             left: 24,
@@ -95,8 +94,8 @@ class ConsultationsScreen extends ConsumerWidget {
                     lastDate: DateTime.now(),
                     builder: (c, child) => Theme(
                       data: Theme.of(c).copyWith(
-                        colorScheme:
-                            const ColorScheme.light(primary: AppColors.primary),
+                        colorScheme: Theme.of(c).colorScheme.copyWith(
+                            primary: AppColors.primary),
                       ),
                       child: child!,
                     ),
@@ -110,20 +109,20 @@ class ConsultationsScreen extends ConsumerWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.divider),
+                    border: Border.all(color: Theme.of(ctx).dividerColor),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_today_outlined,
-                          color: AppColors.textSecondary),
+                      Icon(Icons.calendar_today_outlined,
+                          color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
                       const SizedBox(width: 12),
                       Text(
                         startDate ?? 'Start Date (optional)',
                         style: TextStyle(
                           color: startDate != null
-                              ? AppColors.textPrimary
-                              : AppColors.textSecondary,
+                              ? Theme.of(ctx).colorScheme.onSurface
+                              : Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5),
                         ),
                       ),
                     ],
@@ -169,7 +168,7 @@ class _ConsultationCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: onTap,
@@ -182,7 +181,7 @@ class _ConsultationCard extends StatelessWidget {
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
-                    color: AppColors.secondary,
+                    color: Theme.of(context).colorScheme.secondary,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(
@@ -235,8 +234,8 @@ class _ConsultationCard extends StatelessWidget {
                     if (confirmed == true) onDelete();
                   },
                 ),
-                const Icon(Icons.arrow_forward_ios_rounded,
-                    size: 14, color: AppColors.textSecondary),
+                Icon(Icons.arrow_forward_ios_rounded,
+                    size: 14, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
               ],
             ),
           ),
@@ -262,7 +261,7 @@ class _EmptyState extends StatelessWidget {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: AppColors.secondary,
+                color: Theme.of(context).colorScheme.secondary,
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.folder_open_rounded,

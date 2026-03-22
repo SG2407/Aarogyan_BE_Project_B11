@@ -106,10 +106,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final messagesAsync =
         ref.watch(chatNotifierProvider(widget.conversationId));
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Health Assistant'),
-        backgroundColor: AppColors.surface,
         elevation: 0,
       ),
       body: Column(
@@ -198,7 +196,7 @@ class _MessageBubble extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isUser ? AppColors.primary : AppColors.surface,
+          color: isUser ? AppColors.primary : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
@@ -209,7 +207,7 @@ class _MessageBubble extends StatelessWidget {
         child: Text(
           content,
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: isUser ? Colors.white : AppColors.textPrimary,
+                color: isUser ? Colors.white : Theme.of(context).colorScheme.onSurface,
               ),
         ),
       ),
@@ -232,7 +230,7 @@ class _InputBar extends StatelessWidget {
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         child: Row(
           children: [
             Expanded(
@@ -243,7 +241,7 @@ class _InputBar extends StatelessWidget {
                 decoration: InputDecoration(
                   hintText: 'Ask a health question…',
                   filled: true,
-                  fillColor: AppColors.background,
+                  fillColor: Theme.of(context).scaffoldBackgroundColor,
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   border: OutlineInputBorder(
