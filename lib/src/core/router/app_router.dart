@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/auth_notifier.dart';
@@ -17,12 +18,23 @@ import '../../features/buddy/presentation/screens/buddy_screen.dart';
 import '../../features/mental_health/presentation/screens/mental_health_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 
+/// Bridges Riverpod auth state changes into GoRouter's refreshListenable
+/// so the router re-evaluates redirects without being recreated.
+class _AuthChangeNotifier extends ChangeNotifier {
+  _AuthChangeNotifier(this._ref) {
+    _ref.listen(authNotifierProvider, (_, __) => notifyListeners());
+  }
+  final Ref _ref;
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authNotifierProvider);
+  final notifier = _AuthChangeNotifier(ref);
 
   return GoRouter(
     initialLocation: '/splash',
+    refreshListenable: notifier,
     redirect: (context, state) {
+      final authState = ref.read(authNotifierProvider);
       final isLoading =
           authState.isLoading || authState.value?.status == AuthStatus.unknown;
 

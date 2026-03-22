@@ -21,6 +21,7 @@ dependencies:
 
   # HTTP & API
   dio: ^5.7.0
+  http_parser: ^4.0.0
   retrofit: ^4.4.1
 
   # Supabase
