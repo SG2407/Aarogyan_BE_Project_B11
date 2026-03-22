@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../core/network/dio_client.dart';
 
 class ConsultationRepository {
@@ -86,8 +87,14 @@ class ConsultationRepository {
   }
 
   Future<String> exportPdf(String consultationId) async {
-    // Returns download URL — handled via StreamingResponse on backend
-    return '/export/consultation/$consultationId/pdf';
+    final dir = await getApplicationDocumentsDirectory();
+    final filePath = '${dir.path}/consultation_$consultationId.pdf';
+    await _dio.download(
+      '/export/consultation/$consultationId/pdf',
+      filePath,
+      options: Options(receiveTimeout: const Duration(minutes: 2)),
+    );
+    return filePath;
   }
 }
 

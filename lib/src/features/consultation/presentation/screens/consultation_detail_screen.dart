@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:open_file/open_file.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../data/consultation_repository.dart';
 
@@ -66,14 +67,29 @@ class ConsultationDetailScreen extends ConsumerWidget {
 
   void _exportPdf(BuildContext context, WidgetRef ref) async {
     final repo = ref.read(consultationRepositoryProvider);
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
       const SnackBar(content: Text('Generating PDF...')),
     );
-    final path = repo.exportPdf(consultationId);
-    // In production: open URL with url_launcher
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('PDF ready at: $path')),
-    );
+    try {
+      final path = await repo.exportPdf(consultationId);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('PDF downloaded'),
+          action: SnackBarAction(
+            label: 'Open',
+            onPressed: () => OpenFile.open(path),
+          ),
+          duration: const Duration(seconds: 10),
+        ),
+      );
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
   }
 
   void _showAddSessionSheet(BuildContext context, WidgetRef ref) {
