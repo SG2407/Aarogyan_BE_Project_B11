@@ -1,9 +1,50 @@
+import json
 import logging
 import httpx
 from fastapi import HTTPException
 from app.config import get_settings
+from app.services.rag_pipeline import retrieve_context_rag
 
 logger = logging.getLogger(__name__)
+
+_ROUTER_SYSTEM = """\
+You are a query classifier for a medical RAG system.
+Classify the user query as either "General" or "Detailed".
+
+Rules:
+- "Detailed": The query requires deep analysis, summarization of long content, or \
+complex cross-referencing across multiple topics or sections of a medical reference \
+(e.g. "Summarize the differences between Type 1 and Type 2 diabetes treatments over \
+the last decade.").
+- "General": The query asks a simple factual question, needs a definition, asks about \
+basic symptoms, or is general medical knowledge \
+(e.g. "What are the common symptoms of asthma?").
+
+Respond ONLY with valid JSON — no explanation, no extra text:
+{"route": "Detailed"}  or  {"route": "General"}
+"""
+
+
+async def _route_query(query: str) -> bool:
+    """LLM router — returns True for Detailed (complex), False for General.
+    Defaults to False (General) on any failure.
+    """
+    try:
+        raw = await _call_groq(
+            [{"role": "user", "content": query}],
+            _ROUTER_SYSTEM,
+            temperature=0.0,
+        )
+        # Strip markdown fences if the model wraps the JSON
+        cleaned = raw.strip().strip("```json").strip("```").strip()
+        route = json.loads(cleaned).get("route", "General")
+        is_complex = route == "Detailed"
+        logger.info("LLM router: route=%s | query=%r", route, query[:80])
+        return is_complex
+    except Exception as exc:
+        logger.warning("LLM router failed (%s) — defaulting to General", exc)
+        return False
+
 
 MEDICAL_ASSISTANT_SYSTEM = """You are Aarogyan's Medical Assistant — a supportive, knowledgeable, and empathetic AI health companion.
 
@@ -23,6 +64,31 @@ Always recommend consulting a qualified healthcare provider for medical decision
 Be warm, non-clinical in tone, and especially patient-friendly for elderly users.
 
 User medical profile context will be provided at the start — use it to personalise responses."""
+
+_RAG_MEDICAL_SYSTEM = """\
+You are Aarogyan's Medical Assistant — a supportive, evidence-based AI health companion.
+
+You have been provided with relevant excerpts from trusted medical knowledge sources below.
+Use ONLY the provided context to answer the user's question.
+If the context does not contain enough information, say so honestly and recommend consulting a healthcare provider.
+
+STRICT BOUNDARIES — you must NEVER:
+- Diagnose any medical condition
+- Prescribe medications or recommend dosages
+- Replace professional medical advice
+
+Respond in JSON with this exact structure:
+{{
+  "summary": "<1–2 sentence plain-language answer>",
+  "details": "<fuller explanation with key facts drawn from the context>",
+  "disclaimer": "This information is for educational purposes only. Please consult a qualified healthcare provider before making any medical decisions."
+}}
+
+--- Retrieved Medical Context ---
+{context}
+--- End of Context ---
+
+{profile_section}"""
 
 DOCUMENT_SUMMARY_SYSTEM = """You are a medical document summarisation assistant.
 Your task: Given OCR-extracted text from a medical document (prescription, lab report, or scan report),
@@ -59,7 +125,7 @@ IMPORTANT: Always respond in JSON format:
 }"""
 
 
-async def _call_groq(messages: list[dict], system: str) -> str:
+async def _call_groq(messages: list[dict], system: str, temperature: float = 0.7) -> str:
     settings = get_settings()
     all_messages = [{"role": "system", "content": system}, *messages]
 
@@ -73,7 +139,7 @@ async def _call_groq(messages: list[dict], system: str) -> str:
             json={
                 "model": settings.groq_model,
                 "messages": all_messages,
-                "temperature": 0.7,
+                "temperature": temperature,
             },
         )
         try:
@@ -90,17 +156,84 @@ async def _call_groq(messages: list[dict], system: str) -> str:
         return data["choices"][0]["message"]["content"]
 
 
+async def _chat_with_rag(
+    user_message: str,
+    history: list[dict],
+    profile_context: str,
+    is_complex: bool = False,
+) -> str:
+    """RAG-augmented chat: retrieve context then synthesise with Groq.
+
+    General  (is_complex=False): top-8 chunks, no reranker — fast.
+    Detailed (is_complex=True):  top-8 fetch → cross-encoder rerank → top-3 — accurate.
+    """
+    top_k_return = 3 if is_complex else 8
+    context_str, sources = await retrieve_context_rag(
+        user_message, is_complex=is_complex, top_k_return=top_k_return
+    )
+    logger.info(
+        "RAG retrieved %d source(s); context length=%d (reranker=%s)",
+        len(sources), len(context_str), is_complex,
+    )
+
+    if not context_str:
+        logger.warning("RAG returned no context — falling back to plain LLM")
+        return await _chat_plain(user_message, history, profile_context)
+
+    profile_section = ""
+    if profile_context:
+        profile_section = f"--- User Health Profile ---\n{profile_context}"
+
+    system = _RAG_MEDICAL_SYSTEM.format(
+        context=context_str,
+        profile_section=profile_section,
+    )
+
+    messages = [*history, {"role": "user", "content": user_message}]
+    raw = await _call_groq(messages, system, temperature=0.2)
+
+    # Parse structured JSON and format for the Flutter UI
+    try:
+        data = json.loads(raw)
+        summary = data.get("summary", "")
+        details = data.get("details", "")
+        disclaimer = data.get("disclaimer", "")
+
+        parts = []
+        if summary:
+            parts.append(summary)
+        if details:
+            parts.append(details)
+        if sources:
+            parts.append(f"*Sources: {', '.join(sources)}*")
+        if disclaimer:
+            parts.append(f"\n_{disclaimer}_")
+
+        return "\n\n".join(parts)
+    except (json.JSONDecodeError, AttributeError):
+        return raw
+
+
+async def _chat_plain(
+    user_message: str,
+    history: list[dict],
+    profile_context: str,
+) -> str:
+    """Plain LLM chat without RAG (fallback when Qdrant returns nothing)."""
+    system = MEDICAL_ASSISTANT_SYSTEM
+    if profile_context:
+        system += f"\n\n--- User Health Profile ---\n{profile_context}"
+    messages = [*history, {"role": "user", "content": user_message}]
+    return await _call_groq(messages, system)
+
+
 async def chat_with_ai(
     user_message: str,
     history: list[dict],
     profile_context: str,
 ) -> str:
-    system = MEDICAL_ASSISTANT_SYSTEM
-    if profile_context:
-        system += f"\n\n--- User Health Profile ---\n{profile_context}"
-
-    messages = [*history, {"role": "user", "content": user_message}]
-    return await _call_groq(messages, system)
+    is_complex = await _route_query(user_message)
+    return await _chat_with_rag(user_message, history, profile_context, is_complex=is_complex)
 
 
 async def summarise_document(ocr_text: str) -> str:
@@ -110,13 +243,10 @@ async def summarise_document(ocr_text: str) -> str:
 
 async def emotional_buddy_respond(user_text: str) -> tuple[str, int]:
     """Returns (buddy_reply_text, mood_score)."""
-    import json
-
     messages = [{"role": "user", "content": user_text}]
-    raw = await _call_openrouter(messages, EMOTIONAL_BUDDY_SYSTEM)
+    raw = await _call_groq(messages, EMOTIONAL_BUDDY_SYSTEM)
 
     try:
-        # Parse JSON response
         data = json.loads(raw)
         reply = data.get("response", raw)
         mood_score = int(data.get("mood_score", 5))

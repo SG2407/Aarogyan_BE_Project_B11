@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     groq_api_key: str
     groq_model: str = "llama-3.3-70b-versatile"
 
+    qdrant_url: str
+    qdrant_api_key: str
+    qdrant_collection: str = "medical_rag"
+
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 10080  # 7 days
