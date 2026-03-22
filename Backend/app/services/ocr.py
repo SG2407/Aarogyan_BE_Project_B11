@@ -1,4 +1,5 @@
 import io
+import asyncio
 import fitz  # PyMuPDF
 import easyocr
 from PIL import Image
@@ -16,11 +17,12 @@ def _get_reader():
 
 
 async def extract_text_from_file(file_bytes: bytes, content_type: str) -> str:
-    """Extract text from PDF or image using EasyOCR."""
+    """Extract text from PDF or image — runs in a thread pool so the event loop stays unblocked."""
+    loop = asyncio.get_running_loop()
     if content_type == "application/pdf":
-        return _extract_from_pdf(file_bytes)
+        return await loop.run_in_executor(None, _extract_from_pdf, file_bytes)
     else:
-        return _extract_from_image(file_bytes)
+        return await loop.run_in_executor(None, _extract_from_image, file_bytes)
 
 
 def _extract_from_pdf(pdf_bytes: bytes) -> str:
