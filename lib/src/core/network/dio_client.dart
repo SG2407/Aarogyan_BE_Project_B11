@@ -5,7 +5,7 @@ import 'token_storage.dart';
 // Change to your machine's IP when running on physical device
 // iOS simulator: http://localhost:8000
 // Android emulator: http://10.0.2.2:8000
-const String kBaseUrl = 'http://10.0.2.2:8000/api/v1';
+const String kBaseUrl = 'https://sg2407-aarogyan.hf.space/api/v1';
 
 Dio createDio() {
   final dio = Dio(
