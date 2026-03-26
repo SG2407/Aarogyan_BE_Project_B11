@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS emotional_sessions (
     user_text       TEXT,
     buddy_text      TEXT,
     mood_score      SMALLINT CHECK (mood_score BETWEEN 1 AND 10),
+    emotion         TEXT,
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 

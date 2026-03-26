@@ -4,6 +4,7 @@ from __future__ import annotations
 import json as _json
 import logging
 import asyncio
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from qdrant_client import QdrantClient
@@ -20,16 +21,28 @@ _embed_model: SentenceTransformer | None = None
 _rerank_model: CrossEncoder | None = None
 _qdrant_client: QdrantClient | None = None
 _executor = ThreadPoolExecutor(max_workers=2)
+_load_lock = threading.Lock()
 
 
 def _load_models() -> None:
-    """Load embedding and reranking models (blocking — runs once at startup)."""
+    """Load embedding and reranking models (blocking — called once)."""
     global _embed_model, _rerank_model
     logger.info("Loading embedding model %s …", _EMBED_MODEL_NAME)
     _embed_model = SentenceTransformer(_EMBED_MODEL_NAME)
     logger.info("Loading reranker %s …", _RERANK_MODEL_NAME)
     _rerank_model = CrossEncoder(_RERANK_MODEL_NAME)
     logger.info("RAG models loaded successfully.")
+
+
+def _ensure_models_loaded() -> None:
+    """Thread-safe lazy loader — no-op if models are already in memory."""
+    global _embed_model, _rerank_model
+    if _embed_model is not None and _rerank_model is not None:
+        return
+    with _load_lock:
+        # Double-check inside the lock
+        if _embed_model is None or _rerank_model is None:
+            _load_models()
 
 
 def _get_qdrant() -> QdrantClient:
@@ -45,9 +58,11 @@ def _get_qdrant() -> QdrantClient:
 
 
 async def init_rag_models() -> None:
-    """Pre-warm models at app startup (non-blocking from event-loop perspective)."""
+    """Load models in a thread so the event loop is never blocked.
+    Safe to call multiple times — _ensure_models_loaded() is idempotent.
+    """
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(_executor, _load_models)
+    await loop.run_in_executor(_executor, _ensure_models_loaded)
 
 
 def _retrieve_sync(
@@ -56,9 +71,10 @@ def _retrieve_sync(
     top_k_return: int,
     is_complex: bool,
 ) -> tuple[str, list[str]]:
-    """Synchronous Qdrant search + optional cross-encoder rerank."""
-    if _embed_model is None or _rerank_model is None:
-        raise RuntimeError("RAG models not yet initialised — did init_rag_models() run?")
+    """Synchronous Qdrant search + optional cross-encoder rerank.
+    Lazy-loads models on first call if background loading hasn't finished yet.
+    """
+    _ensure_models_loaded()
 
     settings = get_settings()
     query_vec = _embed_model.encode(query, normalize_embeddings=True).tolist()

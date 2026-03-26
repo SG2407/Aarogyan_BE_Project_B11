@@ -60,12 +60,13 @@ async def voice_interact(
                 "user_text": user_text,
                 "buddy_text": ai_text,
                 "mood_score": mood_score,
+                "emotion": emotion,
             }
         ).execute()
         session_id = session_result.data[0]["id"] if session_result.data else None
     except Exception as db_err:
         import logging
-        logging.getLogger(__name__).warning("Session DB insert failed: %s", db_err)
+        logging.getLogger(__name__).error("Session DB insert failed: %s", db_err, exc_info=True)
 
     return {
         "user_text": user_text,

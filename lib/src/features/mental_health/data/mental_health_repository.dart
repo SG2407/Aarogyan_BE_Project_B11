@@ -7,8 +7,12 @@ class MentalHealthRepository {
   MentalHealthRepository(this._dio);
 
   /// Fetches aggregated mood dashboard data.
-  Future<Map<String, dynamic>> getDashboard() async {
-    final resp = await _dio.get('/mental-health/dashboard');
+  /// [days] = 0 means all-time; 7, 30, 90 for filtered views.
+  Future<Map<String, dynamic>> getDashboard({int days = 30}) async {
+    final resp = await _dio.get(
+      '/mental-health/dashboard',
+      queryParameters: {'days': days},
+    );
     return resp.data as Map<String, dynamic>;
   }
 }
@@ -17,7 +21,11 @@ final mentalHealthRepositoryProvider = Provider<MentalHealthRepository>(
   (ref) => MentalHealthRepository(ref.watch(dioProvider)),
 );
 
+// Selected time filter (days): 7, 30, 90, 0 = all time
+final dashboardFilterProvider = StateProvider<int>((ref) => 30);
+
 final mentalHealthDashboardProvider =
     FutureProvider<Map<String, dynamic>>((ref) async {
-  return ref.read(mentalHealthRepositoryProvider).getDashboard();
+  final days = ref.watch(dashboardFilterProvider);
+  return ref.read(mentalHealthRepositoryProvider).getDashboard(days: days);
 });

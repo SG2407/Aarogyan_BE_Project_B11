@@ -398,12 +398,10 @@ class _OrbPainter extends CustomPainter {
     _drawEdgeGlow(canvas, c, r, clrs);
   }
 
-  void _drawOuterAura(
-      Canvas canvas, Offset c, double r, List<Color> clrs) {
+  void _drawOuterAura(Canvas canvas, Offset c, double r, List<Color> clrs) {
     final auraR = r * 2.1;
-    final alpha = phase == BuddyPhase.idle
-        ? 0.07 + breathT * 0.05
-        : 0.12 + glowT * 0.08;
+    final alpha =
+        phase == BuddyPhase.idle ? 0.07 + breathT * 0.05 : 0.12 + glowT * 0.08;
     canvas.drawCircle(
       c,
       auraR,
@@ -420,8 +418,7 @@ class _OrbPainter extends CustomPainter {
     );
   }
 
-  void _drawRipples(
-      Canvas canvas, Offset c, double r, List<Color> clrs) {
+  void _drawRipples(Canvas canvas, Offset c, double r, List<Color> clrs) {
     for (int i = 0; i < 4; i++) {
       final t = (rippleT + i * 0.25) % 1.0;
       final rR = r * (1.08 + t * 1.9);
@@ -438,8 +435,7 @@ class _OrbPainter extends CustomPainter {
     }
   }
 
-  void _drawEnergyRings(
-      Canvas canvas, Offset c, double r, List<Color> clrs) {
+  void _drawEnergyRings(Canvas canvas, Offset c, double r, List<Color> clrs) {
     final ringR = r * 1.42;
     final start = ringT * math.pi * 2;
     // Outer soft glow arc
@@ -481,8 +477,7 @@ class _OrbPainter extends CustomPainter {
     );
   }
 
-  void _drawCoreOrb(
-      Canvas canvas, Offset c, double r, List<Color> clrs) {
+  void _drawCoreOrb(Canvas canvas, Offset c, double r, List<Color> clrs) {
     // Fluid internal gradient that slowly orbits
     final gx = math.cos(innerT * math.pi * 2) * 0.28;
     final gy = math.sin(innerT * math.pi * 2) * 0.28;
@@ -527,8 +522,7 @@ class _OrbPainter extends CustomPainter {
     );
   }
 
-  void _drawEdgeGlow(
-      Canvas canvas, Offset c, double r, List<Color> clrs) {
+  void _drawEdgeGlow(Canvas canvas, Offset c, double r, List<Color> clrs) {
     canvas.drawCircle(
       c,
       r,

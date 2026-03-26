@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../data/document_repository.dart';
 
@@ -40,7 +41,10 @@ class DocumentScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Document Scanner')),
       body: result == null
           ? _UploadPrompt(
-              loading: loading, onUpload: () => _pickFile(context, ref))
+              loading: loading,
+              onPickFile: () => _pickFile(context, ref),
+              onCamera: () => _takePhoto(context, ref),
+            )
           : _ResultView(
               result: result,
               onScanAnother: () =>
@@ -58,46 +62,57 @@ class DocumentScreen extends ConsumerWidget {
     final file = picked.files.first;
     if (file.path == null) return;
 
+    String contentType;
+    switch (file.extension?.toLowerCase()) {
+      case 'pdf':
+        contentType = 'application/pdf';
+        break;
+      case 'png':
+        contentType = 'image/png';
+        break;
+      default:
+        contentType = 'image/jpeg';
+    }
+    await _processFile(context, ref, file.path!, file.name, contentType);
+  }
+
+  Future<void> _takePhoto(BuildContext context, WidgetRef ref) async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+    final fileName = 'scan_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await _processFile(context, ref, picked.path, fileName, 'image/jpeg');
+  }
+
+  Future<void> _processFile(
+    BuildContext context,
+    WidgetRef ref,
+    String path,
+    String name,
+    String contentType,
+  ) async {
     ref.read(_loadingProvider.notifier).state = true;
     try {
-      // Check file size before uploading (1.5 MB limit)
-      final fileSize = await File(file.path!).length();
+      final fileSize = await File(path).length();
       if (fileSize > 1536 * 1024) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                  'File too large (${(fileSize / (1024 * 1024)).toStringAsFixed(1)} MB). Please upload a document under 1.5 MB.'),
+                  'File too large (${(fileSize / (1024 * 1024)).toStringAsFixed(1)} MB). Please use a document under 1.5 MB.'),
               backgroundColor: Colors.red.shade700,
             ),
           );
         }
-        ref.read(_loadingProvider.notifier).state = false;
         return;
       }
       final repo = ref.read(documentRepositoryProvider);
-
-      String contentType;
-      switch (file.extension?.toLowerCase()) {
-        case 'pdf':
-          contentType = 'application/pdf';
-          break;
-        case 'png':
-          contentType = 'image/png';
-          break;
-        default:
-          contentType = 'image/jpeg';
-      }
-
-      final data = await repo.summariseDocument(
-        file.path!,
-        file.name,
-        contentType,
-      );
-
+      final data = await repo.summariseDocument(path, name, contentType);
       final summary = data['summary'] as Map<String, dynamic>? ?? {};
       ref.read(_documentResultProvider.notifier).state = DocumentResult(
-        fileName: file.name,
+        fileName: name,
         documentType: summary['document_type']?.toString() ?? 'Document',
         explanation: summary['explanation']?.toString() ?? '',
         keyFindings: (summary['key_findings'] as List<dynamic>?)
@@ -127,9 +142,14 @@ class DocumentScreen extends ConsumerWidget {
 
 class _UploadPrompt extends StatelessWidget {
   final bool loading;
-  final VoidCallback onUpload;
+  final VoidCallback onPickFile;
+  final VoidCallback onCamera;
 
-  const _UploadPrompt({required this.loading, required this.onUpload});
+  const _UploadPrompt({
+    required this.loading,
+    required this.onPickFile,
+    required this.onCamera,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -172,19 +192,37 @@ class _UploadPrompt extends StatelessWidget {
                 ],
               )
             else
-              ElevatedButton.icon(
-                onPressed: onUpload,
-                style: ElevatedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                ),
-                icon: const Icon(Icons.upload_file_rounded),
-                label: const Text('Choose File'),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onCamera,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        side: const BorderSide(color: AppColors.primary),
+                        foregroundColor: AppColors.primary,
+                      ),
+                      icon: const Icon(Icons.camera_alt_rounded),
+                      label: const Text('Camera'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: onPickFile,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      icon: const Icon(Icons.upload_file_rounded),
+                      label: const Text('Choose File'),
+                    ),
+                  ),
+                ],
               ),
             const SizedBox(height: 12),
             if (!loading)
               Text(
-                'Supports PDF, JPG, PNG (up to 10 MB)',
+                'Camera · PDF · JPG · PNG  (max 1.5 MB)',
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium

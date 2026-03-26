@@ -21,10 +21,12 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
     from app.services.rag_pipeline import init_rag_models
-    logger.info("Pre-warming RAG models…")
-    await init_rag_models()
-    logger.info("RAG models ready.")
+    # Fire-and-forget: load models in background so startup is instant.
+    # Requests that arrive before loading finishes will lazy-load on first use.
+    asyncio.create_task(init_rag_models())
+    logger.info("App started. RAG models loading in background.")
     yield
 
 
