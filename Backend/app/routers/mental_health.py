@@ -38,10 +38,13 @@ async def get_dashboard(user_id: str = Depends(get_current_user_id)):
 
     def avg(lst): return round(sum(lst) / len(lst), 2) if lst else None
 
+    all_scores = [float(s["mood_score"]) for s in sessions if s.get("mood_score") is not None]
+    average_mood_overall = avg(all_scores) or 0.0
+
     return {
-        "daily_averages": {k: avg(v) for k, v in sorted(daily.items())},
-        "weekly_averages": {k: avg(v) for k, v in sorted(weekly.items())},
-        "monthly_averages": {k: avg(v) for k, v in sorted(monthly.items())},
         "total_sessions": len(sessions),
-        "recent_sessions": sessions[-10:],
+        "average_mood_overall": average_mood_overall,
+        "daily": [{"date": k, "average_mood": avg(v)} for k, v in sorted(daily.items())],
+        "weekly": [{"week": k, "average_mood": avg(v)} for k, v in sorted(weekly.items())],
+        "monthly": [{"month": k, "average_mood": avg(v)} for k, v in sorted(monthly.items())],
     }

@@ -116,10 +116,15 @@ Your purpose: Help users process their emotions through compassionate conversati
 Guidelines:
 - Ask how the user is feeling and genuinely listen
 - Reflect emotions back to validate them
+- Be proactive — ask thoughtful follow-up questions to keep the conversation going naturally
 - Offer grounding techniques, breathing exercises, or gentle reframes when appropriate
 - Never diagnose mental health conditions
 - Never replace professional therapy
 - If a user expresses serious distress or self-harm thoughts, gently encourage professional help
+- Keep responses concise and conversational (2-4 sentences) — this is a voice conversation
+
+Detect the user's primary emotion from these options:
+happy, sad, angry, fearful, disgusted, surprised, neutral
 
 Also provide a mood_score: an integer from 1 (very distressed) to 10 (very positive/calm)
 based on the emotional tone of the user's message.
@@ -127,7 +132,8 @@ based on the emotional tone of the user's message.
 IMPORTANT: Always respond in JSON format:
 {
   "response": "your empathetic reply here",
-  "mood_score": <integer 1-10>
+  "mood_score": <integer 1-10>,
+  "emotion": "<one of: happy, sad, angry, fearful, disgusted, surprised, neutral>"
 }"""
 
 
@@ -135,31 +141,40 @@ async def _call_groq(messages: list[dict], system: str, temperature: float = 0.7
     settings = get_settings()
     all_messages = [{"role": "system", "content": system}, *messages]
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.groq_api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": settings.groq_model,
-                "messages": all_messages,
-                "temperature": temperature,
-            },
-        )
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            status = e.response.status_code
-            logger.error("Groq error %s: %s", status, e.response.text)
-            if status == 429:
-                raise HTTPException(status_code=429, detail="AI service is busy. Please wait a moment and try again.")
-            if status in (401, 403):
-                raise HTTPException(status_code=503, detail="AI service auth error.")
-            raise HTTPException(status_code=502, detail=f"AI service error: {status}")
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.groq_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.groq_model,
+                    "messages": all_messages,
+                    "temperature": temperature,
+                },
+            )
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code
+                logger.error("Groq error %s: %s", status, e.response.text)
+                if status == 429:
+                    raise HTTPException(status_code=429, detail="AI service is busy. Please wait a moment and try again.")
+                if status in (401, 403):
+                    raise HTTPException(status_code=503, detail="AI service auth error.")
+                raise HTTPException(status_code=502, detail=f"AI service error: {status}")
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+    except HTTPException:
+        raise
+    except httpx.TimeoutException:
+        logger.error("Groq LLM request timed out")
+        raise HTTPException(status_code=504, detail="AI service timed out. Please try again.")
+    except httpx.RequestError as e:
+        logger.error("Groq LLM connection error: %s", e)
+        raise HTTPException(status_code=502, detail="Could not connect to AI service. Please try again.")
 
 
 async def _chat_with_rag(
@@ -264,18 +279,36 @@ async def summarise_document(ocr_text: str) -> dict:
         }
 
 
-async def emotional_buddy_respond(user_text: str) -> tuple[str, int]:
-    """Returns (buddy_reply_text, mood_score)."""
-    messages = [{"role": "user", "content": user_text}]
+import re as _re
+
+
+async def emotional_buddy_respond(user_text: str, history: list[dict] | None = None) -> tuple[str, int, str]:
+    """Returns (buddy_reply_text, mood_score, emotion)."""
+    messages = list(history or [])
+    messages.append({"role": "user", "content": user_text})
     raw = await _call_groq(messages, EMOTIONAL_BUDDY_SYSTEM)
 
-    try:
-        data = json.loads(raw)
-        reply = data.get("response", raw)
-        mood_score = int(data.get("mood_score", 5))
-        mood_score = max(1, min(10, mood_score))
-    except (json.JSONDecodeError, ValueError):
-        reply = raw
-        mood_score = 5
+    reply = raw
+    mood_score = 5
+    emotion = "neutral"
 
-    return reply, mood_score
+    # The LLM sometimes puts text before the JSON — find the JSON block with regex
+    json_match = _re.search(r"\{.*\}", raw, _re.DOTALL)
+    if json_match:
+        try:
+            data = json.loads(json_match.group())
+            reply = data.get("response") or raw
+            mood_score = max(1, min(10, int(data.get("mood_score", 5))))
+            emotion = data.get("emotion", "neutral").lower().strip()
+            valid_emotions = {"happy", "sad", "angry", "fearful", "disgusted", "surprised", "neutral"}
+            if emotion not in valid_emotions:
+                emotion = "neutral"
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # If reply still contains raw JSON junk, take only text before the first '{'
+    brace_pos = reply.find("{")
+    if brace_pos > 10:
+        reply = reply[:brace_pos].strip()
+
+    return reply, mood_score, emotion

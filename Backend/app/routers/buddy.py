@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
+import json
+import base64
 from app.auth import get_current_user_id
 from app.database import get_supabase
 from app.services.ai import emotional_buddy_respond
 from app.services.tts import text_to_speech_bytes
 from app.services.stt import speech_to_text
-from fastapi import UploadFile, File
-import base64
 
 router = APIRouter(prefix="/buddy", tags=["emotional-buddy"])
 
@@ -20,6 +20,7 @@ class BuddyTextRequest(BaseModel):
 @router.post("/voice")
 async def voice_interact(
     audio: UploadFile = File(...),
+    history_json: Optional[str] = Form(default=None),
     user_id: str = Depends(get_current_user_id),
 ):
     """Receive voice audio, return AI empathetic response as voice audio."""
@@ -30,31 +31,49 @@ async def voice_interact(
     if not user_text.strip():
         raise HTTPException(status_code=422, detail="Could not transcribe audio")
 
+    # Parse conversation history
+    history = []
+    if history_json:
+        try:
+            history = json.loads(history_json)
+        except (json.JSONDecodeError, ValueError):
+            history = []
+
     # AI response
-    ai_text, mood_score = await emotional_buddy_respond(user_text)
+    ai_text, mood_score, emotion = await emotional_buddy_respond(user_text, history)
 
-    # TTS
-    audio_response = await text_to_speech_bytes(ai_text)
+    # TTS — non-critical: if edge-tts fails, return text with no audio
+    audio_response = b""
+    try:
+        audio_response = await text_to_speech_bytes(ai_text)
+    except Exception as tts_err:
+        import logging
+        logging.getLogger(__name__).warning("TTS failed: %s", tts_err)
 
-    # Store session mood
-    db = get_supabase()
-    session_result = db.table("emotional_sessions").insert(
-        {
-            "user_id": user_id,
-            "user_text": user_text,
-            "buddy_text": ai_text,
-            "mood_score": mood_score,
-        }
-    ).execute()
-
-    session_id = session_result.data[0]["id"] if session_result.data else None
+    # Store session mood — non-critical: DB failure must not block the response
+    session_id = None
+    try:
+        db = get_supabase()
+        session_result = db.table("emotional_sessions").insert(
+            {
+                "user_id": user_id,
+                "user_text": user_text,
+                "buddy_text": ai_text,
+                "mood_score": mood_score,
+            }
+        ).execute()
+        session_id = session_result.data[0]["id"] if session_result.data else None
+    except Exception as db_err:
+        import logging
+        logging.getLogger(__name__).warning("Session DB insert failed: %s", db_err)
 
     return {
         "user_text": user_text,
         "buddy_text": ai_text,
         "mood_score": mood_score,
+        "emotion": emotion,
         "session_id": session_id,
-        "audio_base64": base64.b64encode(audio_response).decode("utf-8"),
+        "audio_base64": base64.b64encode(audio_response).decode("utf-8") if audio_response else "",
     }
 
 

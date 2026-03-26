@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:record/record.dart';
@@ -9,37 +10,53 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../data/buddy_repository.dart';
 
-// --- State ---
-enum BuddyState { idle, recording, processing, playing }
+// ─── State ────────────────────────────────────────────────────────────────────
+enum BuddyPhase { idle, listening, processing, playing }
+
+class ConversationTurn {
+  final String role; // 'user' | 'assistant'
+  final String content;
+  const ConversationTurn({required this.role, required this.content});
+  Map<String, String> toMap() => {'role': role, 'content': content};
+}
 
 class BuddyStateData {
-  final BuddyState state;
+  final BuddyPhase phase;
+  final bool conversationActive;
+  final String? lastUserText;
   final String? lastReply;
-  final double? moodScore;
+  final List<ConversationTurn> history;
   final String? error;
 
   const BuddyStateData({
-    this.state = BuddyState.idle,
+    this.phase = BuddyPhase.idle,
+    this.conversationActive = false,
+    this.lastUserText,
     this.lastReply,
-    this.moodScore,
+    this.history = const [],
     this.error,
   });
 
   BuddyStateData copyWith({
-    BuddyState? state,
+    BuddyPhase? phase,
+    bool? conversationActive,
+    String? lastUserText,
     String? lastReply,
-    double? moodScore,
+    List<ConversationTurn>? history,
     String? error,
   }) {
     return BuddyStateData(
-      state: state ?? this.state,
+      phase: phase ?? this.phase,
+      conversationActive: conversationActive ?? this.conversationActive,
+      lastUserText: lastUserText ?? this.lastUserText,
       lastReply: lastReply ?? this.lastReply,
-      moodScore: moodScore ?? this.moodScore,
+      history: history ?? this.history,
       error: error,
     );
   }
 }
 
+// ─── Notifier ─────────────────────────────────────────────────────────────────
 class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
   final _recorder = AudioRecorder();
   final _player = AudioPlayer();
@@ -54,51 +71,87 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     return const BuddyStateData();
   }
 
-  Future<void> startRecording() async {
+  /// "Start Conversation" — activates the UI, ready for first input
+  Future<void> startConversation() async {
+    state = state.copyWith(conversationActive: true, history: [], error: null);
+  }
+
+  /// "Start Talking" — user taps mic button, begin recording
+  Future<void> startTalking() async {
     if (!await _recorder.hasPermission()) {
       state = state.copyWith(
-          state: BuddyState.idle, error: 'Microphone permission denied');
+        phase: BuddyPhase.idle,
+        error: 'Microphone permission denied',
+      );
       return;
     }
+
     final dir = await getTemporaryDirectory();
     _recordingPath =
-        '${dir.path}/orbz_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        '${dir.path}/buddy_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
     await _recorder.start(
       const RecordConfig(encoder: AudioEncoder.aacLc),
       path: _recordingPath!,
     );
-    state = state.copyWith(state: BuddyState.recording, error: null);
+
+    state = state.copyWith(phase: BuddyPhase.listening, error: null);
   }
 
-  Future<void> stopRecordingAndSend() async {
+  /// "Stop Talking" — user taps stop button, send audio to backend
+  Future<void> stopTalking() async {
     final path = await _recorder.stop();
     if (path == null) return;
-    state = state.copyWith(state: BuddyState.processing);
+
+    state = state.copyWith(phase: BuddyPhase.processing);
+
     try {
       final repo = ref.read(buddyRepositoryProvider);
-      final result = await repo.sendVoice(path);
+      final historyMaps = state.history.map((t) => t.toMap()).toList();
+      final result = await repo.sendVoice(path, historyMaps);
 
-      final reply = result['reply'] as String? ?? '';
-      final moodScore = (result['mood_score'] as num?)?.toDouble() ?? 5.0;
+      final userText = result['user_text'] as String? ?? '';
+      final reply = result['buddy_text'] as String? ?? '';
       final audioBase64 = result['audio_base64'] as String?;
 
+      final newHistory = [
+        ...state.history,
+        ConversationTurn(role: 'user', content: userText),
+        ConversationTurn(role: 'assistant', content: reply),
+      ];
+      final trimmed = newHistory.length > 10
+          ? newHistory.sublist(newHistory.length - 10)
+          : newHistory;
+
       state = state.copyWith(
-        state: BuddyState.playing,
+        phase: BuddyPhase.playing,
+        lastUserText: userText,
         lastReply: reply,
-        moodScore: moodScore,
+        history: trimmed,
+        error: null,
       );
 
       if (audioBase64 != null && audioBase64.isNotEmpty) {
         await _playBase64Audio(audioBase64);
       }
-      state = state.copyWith(state: BuddyState.idle);
+
+      if (state.conversationActive && state.phase == BuddyPhase.playing) {
+        state = state.copyWith(phase: BuddyPhase.idle);
+      }
     } catch (e) {
+      String msg = 'Something went wrong — please try again.';
+      if (e is DioException) {
+        final status = e.response?.statusCode;
+        final detail = e.response?.data is Map
+            ? (e.response!.data as Map)['detail'] ?? e.message
+            : e.message;
+        msg = 'Error $status: $detail';
+      }
       state = state.copyWith(
-        state: BuddyState.idle,
-        error: 'Something went wrong. Please try again.',
+        phase: BuddyPhase.idle,
+        error: msg,
       );
     } finally {
-      // Clean up temp recording file
       try {
         final f = File(path);
         if (await f.exists()) await f.delete();
@@ -109,18 +162,27 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
   Future<void> _playBase64Audio(String base64Audio) async {
     final bytes = base64Decode(base64Audio);
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/orbz_response.mp3');
+    final file = File('${dir.path}/buddy_response.mp3');
     await file.writeAsBytes(bytes);
     await _player.setFilePath(file.path);
     await _player.play();
     await _player.playerStateStream.firstWhere(
-      (s) => s.processingState == ProcessingState.completed,
+      (s) =>
+          s.processingState == ProcessingState.completed ||
+          s.processingState == ProcessingState.idle,
     );
   }
 
-  void cancelRecording() async {
+  /// Interrupt AI mid-speech → return to idle
+  Future<void> interrupt() async {
+    await _player.stop();
+    state = state.copyWith(phase: BuddyPhase.idle);
+  }
+
+  Future<void> endConversation() async {
     await _recorder.cancel();
-    state = state.copyWith(state: BuddyState.idle);
+    await _player.stop();
+    state = const BuddyStateData();
   }
 }
 
@@ -128,77 +190,59 @@ final buddyNotifierProvider =
     AutoDisposeNotifierProvider<BuddyNotifier, BuddyStateData>(
         BuddyNotifier.new);
 
-// --- UI ---
+// ─── Screen ───────────────────────────────────────────────────────────────────
 class BuddyScreen extends ConsumerWidget {
   const BuddyScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final buddyState = ref.watch(buddyNotifierProvider);
+    final s = ref.watch(buddyNotifierProvider);
     final notifier = ref.read(buddyNotifierProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Orbz — Emotional Buddy')),
+      appBar: AppBar(
+        title: const Text('Orbz — Emotional Buddy'),
+        actions: [
+          if (s.conversationActive)
+            TextButton(
+              onPressed: notifier.endConversation,
+              child: const Text('End'),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             children: [
               const Spacer(),
-
-              // Orbz animated avatar
-              _OrbzAvatar(state: buddyState.state),
-              const SizedBox(height: 32),
-
-              // State label
-              _StateLabel(state: buddyState.state),
-              const SizedBox(height: 16),
-
-              // Mood score if available
-              if (buddyState.moodScore != null) ...[
-                _MoodBar(score: buddyState.moodScore!),
-                const SizedBox(height: 16),
-              ],
-
-              // Last reply bubble
-              if (buddyState.lastReply != null &&
-                  buddyState.lastReply!.isNotEmpty) ...[
-                _ReplyBubble(text: buddyState.lastReply!),
-                const SizedBox(height: 16),
-              ],
-
-              // Error
-              if (buddyState.error != null)
+              _OrbzAvatar(phase: s.phase),
+              const SizedBox(height: 28),
+              _PhaseLabel(
+                  phase: s.phase, conversationActive: s.conversationActive),
+              const SizedBox(height: 20),
+              if (s.error != null)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(buddyState.error!,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: AppColors.error),
-                      textAlign: TextAlign.center),
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    s.error!,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.error),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-
               const Spacer(),
-
-              // Action button
-              _ActionButton(
-                state: buddyState.state,
-                onPressStart: notifier.startRecording,
-                onPressStop: notifier.stopRecordingAndSend,
-                onCancel: notifier.cancelRecording,
+              _BottomControls(
+                phase: s.phase,
+                conversationActive: s.conversationActive,
+                onStart: notifier.startConversation,
+                onStartTalking: notifier.startTalking,
+                onStopTalking: notifier.stopTalking,
+                onInterrupt: notifier.interrupt,
               ),
-
               const SizedBox(height: 24),
-
-              Text(
-                'Hold the button and speak. Orbz is here to listen.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
-                textAlign: TextAlign.center,
-              ),
             ],
           ),
         ),
@@ -207,246 +251,258 @@ class BuddyScreen extends ConsumerWidget {
   }
 }
 
+// ─── Orbz Avatar ──────────────────────────────────────────────────────────────
 class _OrbzAvatar extends StatelessWidget {
-  final BuddyState state;
-  const _OrbzAvatar({required this.state});
+  final BuddyPhase phase;
+  const _OrbzAvatar({required this.phase});
 
   @override
   Widget build(BuildContext context) {
-    final isActive =
-        state == BuddyState.recording || state == BuddyState.processing;
-    final isPlaying = state == BuddyState.playing;
+    final isListening = phase == BuddyPhase.listening;
+    final isPlaying = phase == BuddyPhase.playing;
+    final isProcessing = phase == BuddyPhase.processing;
+
+    Color bgColor = Theme.of(context).colorScheme.secondary;
+    if (isListening) bgColor = AppColors.primary;
+    if (isPlaying) bgColor = AppColors.accent;
+    if (isProcessing) bgColor = AppColors.primary.withValues(alpha: 0.55);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 400),
-      width: isActive ? 160 : 140,
-      height: isActive ? 160 : 140,
+      width: (isListening || isPlaying) ? 160 : 140,
+      height: (isListening || isPlaying) ? 160 : 140,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isActive ? AppColors.primary : Theme.of(context).colorScheme.secondary,
-        boxShadow: isActive
+        color: bgColor,
+        boxShadow: (isListening || isPlaying)
             ? [
                 BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.4),
-                  blurRadius: 40,
-                  spreadRadius: 10,
+                  color: bgColor.withValues(alpha: 0.45),
+                  blurRadius: 48,
+                  spreadRadius: 12,
                 ),
               ]
-            : isPlaying
-                ? [
-                    BoxShadow(
-                      color: AppColors.accent.withValues(alpha: 0.4),
-                      blurRadius: 40,
-                      spreadRadius: 10,
-                    ),
-                  ]
-                : [],
+            : [],
       ),
       child: Center(
-        child: Text(
-          'O',
-          style: TextStyle(
-            fontSize: 72,
-            fontWeight: FontWeight.w700,
-            color: isActive ? Colors.white : AppColors.primary,
-          ),
-        ),
+        child: isProcessing
+            ? const CircularProgressIndicator(
+                color: Colors.white, strokeWidth: 3)
+            : const Text(
+                'O',
+                style: TextStyle(
+                  fontSize: 72,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
       ),
     )
         .animate(
-          onPlay: (controller) =>
-              isActive ? controller.repeat(reverse: true) : controller.stop(),
+          onPlay: (c) =>
+              (isListening || isPlaying) ? c.repeat(reverse: true) : c.stop(),
         )
         .scaleXY(
           duration: 800.ms,
           begin: 1.0,
-          end: isActive ? 1.08 : 1.0,
+          end: (isListening || isPlaying) ? 1.07 : 1.0,
         );
   }
 }
 
-class _StateLabel extends StatelessWidget {
-  final BuddyState state;
-  const _StateLabel({required this.state});
+// ─── Phase label ──────────────────────────────────────────────────────────────
+class _PhaseLabel extends StatelessWidget {
+  final BuddyPhase phase;
+  final bool conversationActive;
+  const _PhaseLabel({required this.phase, required this.conversationActive});
 
   String _label() {
-    switch (state) {
-      case BuddyState.idle:
-        return 'Tap to talk to Orbz';
-      case BuddyState.recording:
+    if (!conversationActive) return 'Tap below to start talking with Orbz';
+    switch (phase) {
+      case BuddyPhase.idle:
+        return 'Tap below to start talking with Orbz';
+      case BuddyPhase.listening:
         return 'Listening...';
-      case BuddyState.processing:
+      case BuddyPhase.processing:
         return 'Orbz is thinking...';
-      case BuddyState.playing:
+      case BuddyPhase.playing:
         return 'Orbz is speaking...';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      _label(),
-      style: Theme.of(context)
-          .textTheme
-          .headlineSmall
-          ?.copyWith(color: AppColors.primary),
-      textAlign: TextAlign.center,
-    );
-  }
-}
-
-class _MoodBar extends StatelessWidget {
-  final double score; // 1–10
-  const _MoodBar({required this.score});
-
-  String _moodLabel() {
-    if (score >= 8) return 'Great mood 😄';
-    if (score >= 6) return 'Good mood 🙂';
-    if (score >= 4) return 'Neutral 😐';
-    if (score >= 2) return 'Low mood 😔';
-    return 'Very low mood 😢';
-  }
-
-  Color _moodColor() {
-    if (score >= 8) return const Color(0xFF4CAF50);
-    if (score >= 6) return const Color(0xFF8BC34A);
-    if (score >= 4) return const Color(0xFFFFC107);
-    if (score >= 2) return const Color(0xFFFF9800);
-    return AppColors.error;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Mood', style: Theme.of(context).textTheme.bodyMedium),
-            Text(_moodLabel(),
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: _moodColor())),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: LinearProgressIndicator(
-            value: (score - 1) / 9,
-            minHeight: 8,
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-            valueColor: AlwaysStoppedAnimation<Color>(_moodColor()),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ReplyBubble extends StatelessWidget {
-  final String text;
-  const _ReplyBubble({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-      ),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
       child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodyLarge,
+        _label(),
+        key: ValueKey(_label()),
+        style: Theme.of(context)
+            .textTheme
+            .headlineSmall
+            ?.copyWith(color: AppColors.primary),
         textAlign: TextAlign.center,
       ),
     );
   }
 }
 
-class _ActionButton extends StatelessWidget {
-  final BuddyState state;
-  final VoidCallback onPressStart;
-  final VoidCallback onPressStop;
-  final VoidCallback onCancel;
+// ─── Bottom controls ──────────────────────────────────────────────────────────
+class _BottomControls extends StatelessWidget {
+  final BuddyPhase phase;
+  final bool conversationActive;
+  final VoidCallback onStart;
+  final VoidCallback onStartTalking;
+  final VoidCallback onStopTalking;
+  final VoidCallback onInterrupt;
 
-  const _ActionButton({
-    required this.state,
-    required this.onPressStart,
-    required this.onPressStop,
-    required this.onCancel,
+  const _BottomControls({
+    required this.phase,
+    required this.conversationActive,
+    required this.onStart,
+    required this.onStartTalking,
+    required this.onStopTalking,
+    required this.onInterrupt,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (state == BuddyState.idle || state == BuddyState.playing) {
-      return GestureDetector(
-        onTap: onPressStart,
-        child: Container(
-          width: 80,
-          height: 80,
-          decoration: const BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.mic_rounded, color: Colors.white, size: 36),
-        ),
-      );
-    }
-
-    if (state == BuddyState.recording) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
+    // ── Not started yet ──
+    if (!conversationActive) {
+      return Column(
         children: [
-          GestureDetector(
-            onTap: onCancel,
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.close_rounded,
-                  color: AppColors.error, size: 28),
+          ElevatedButton.icon(
+            onPressed: onStart,
+            icon: const Icon(Icons.favorite_rounded),
+            label: const Text('Start Conversation'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(32)),
+              textStyle:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ),
-          const SizedBox(width: 20),
-          GestureDetector(
-            onTap: onPressStop,
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              child:
-                  const Icon(Icons.stop_rounded, color: Colors.white, size: 36),
-            ),
+          const SizedBox(height: 10),
+          Text(
+            'Start a conversation with your emotional buddy',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.5),
+                ),
+            textAlign: TextAlign.center,
           ),
         ],
       );
     }
 
-    // Processing
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondary,
-        shape: BoxShape.circle,
-      ),
-      child: const Padding(
-        padding: EdgeInsets.all(20),
-        child: CircularProgressIndicator(
-          strokeWidth: 3,
-          color: AppColors.primary,
-        ),
-      ),
+    // ── Idle — show Start Talking button ──
+    if (phase == BuddyPhase.idle) {
+      return Column(
+        children: [
+          GestureDetector(
+            onTap: onStartTalking,
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.primary, width: 2),
+              ),
+              child: const Icon(Icons.mic_rounded,
+                  color: AppColors.primary, size: 30),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Tap to start talking',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.5),
+                ),
+          ),
+        ],
+      );
+    }
+
+    // ── Listening — show Stop Talking button ──
+    if (phase == BuddyPhase.listening) {
+      return Column(
+        children: [
+          GestureDetector(
+            onTap: onStopTalking,
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: const BoxDecoration(
+                color: Color(0xFFE53935),
+                shape: BoxShape.circle,
+              ),
+              child:
+                  const Icon(Icons.stop_rounded, color: Colors.white, size: 30),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Tap to stop and send',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.5),
+                ),
+          ),
+        ],
+      );
+    }
+
+    // ── AI is speaking — show Interrupt button ──
+    if (phase == BuddyPhase.playing) {
+      return Column(
+        children: [
+          GestureDetector(
+            onTap: onInterrupt,
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.error, width: 2),
+              ),
+              child: const Icon(Icons.mic_rounded,
+                  color: AppColors.error, size: 30),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Tap to interrupt and speak',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.5),
+                ),
+          ),
+        ],
+      );
+    }
+
+    // ── Processing — spinner hint, no button ──
+    return Text(
+      'Processing your message...',
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color:
+                Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+      textAlign: TextAlign.center,
     );
   }
 }
