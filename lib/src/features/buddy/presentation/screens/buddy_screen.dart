@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:record/record.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'dart:math' as math;
 import '../../../../core/theme/app_theme.dart';
 import '../../data/buddy_repository.dart';
 
@@ -214,9 +214,10 @@ class BuddyScreen extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Spacer(),
-              _OrbzAvatar(phase: s.phase),
+              Center(child: _OrbzAvatar(phase: s.phase)),
               const SizedBox(height: 28),
               _PhaseLabel(
                   phase: s.phase, conversationActive: s.conversationActive),
@@ -252,62 +253,295 @@ class BuddyScreen extends ConsumerWidget {
 }
 
 // ─── Orbz Avatar ──────────────────────────────────────────────────────────────
-class _OrbzAvatar extends StatelessWidget {
+class _OrbzAvatar extends StatefulWidget {
   final BuddyPhase phase;
   const _OrbzAvatar({required this.phase});
 
   @override
-  Widget build(BuildContext context) {
-    final isListening = phase == BuddyPhase.listening;
-    final isPlaying = phase == BuddyPhase.playing;
-    final isProcessing = phase == BuddyPhase.processing;
+  State<_OrbzAvatar> createState() => _OrbzAvatarState();
+}
 
-    Color bgColor = Theme.of(context).colorScheme.secondary;
-    if (isListening) bgColor = AppColors.primary;
-    if (isPlaying) bgColor = AppColors.accent;
-    if (isProcessing) bgColor = AppColors.primary.withValues(alpha: 0.55);
+class _OrbzAvatarState extends State<_OrbzAvatar>
+    with TickerProviderStateMixin {
+  late final AnimationController _breathCtrl;
+  late final AnimationController _rippleCtrl;
+  late final AnimationController _glowCtrl;
+  late final AnimationController _ringCtrl;
+  late final AnimationController _innerCtrl;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 400),
-      width: (isListening || isPlaying) ? 160 : 140,
-      height: (isListening || isPlaying) ? 160 : 140,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: bgColor,
-        boxShadow: (isListening || isPlaying)
-            ? [
-                BoxShadow(
-                  color: bgColor.withValues(alpha: 0.45),
-                  blurRadius: 48,
-                  spreadRadius: 12,
-                ),
-              ]
-            : [],
-      ),
-      child: Center(
-        child: isProcessing
-            ? const CircularProgressIndicator(
-                color: Colors.white, strokeWidth: 3)
-            : const Text(
-                'O',
-                style: TextStyle(
-                  fontSize: 72,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-      ),
-    )
-        .animate(
-          onPlay: (c) =>
-              (isListening || isPlaying) ? c.repeat(reverse: true) : c.stop(),
-        )
-        .scaleXY(
-          duration: 800.ms,
-          begin: 1.0,
-          end: (isListening || isPlaying) ? 1.07 : 1.0,
-        );
+  @override
+  void initState() {
+    super.initState();
+    _breathCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 3200));
+    _rippleCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1600));
+    _glowCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1100));
+    _ringCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2800));
+    _innerCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 5000))
+      ..repeat();
+    _syncAnimations(widget.phase);
   }
+
+  void _syncAnimations(BuddyPhase phase) {
+    _breathCtrl.stop();
+    _rippleCtrl.stop();
+    _glowCtrl.stop();
+    _ringCtrl.stop();
+    switch (phase) {
+      case BuddyPhase.idle:
+        _breathCtrl.repeat(reverse: true);
+        _glowCtrl.repeat(reverse: true);
+        break;
+      case BuddyPhase.listening:
+        _rippleCtrl.repeat();
+        _glowCtrl.repeat(reverse: true);
+        break;
+      case BuddyPhase.processing:
+      case BuddyPhase.playing:
+        _ringCtrl.repeat();
+        _glowCtrl.repeat(reverse: true);
+        break;
+    }
+  }
+
+  @override
+  void didUpdateWidget(_OrbzAvatar old) {
+    super.didUpdateWidget(old);
+    if (old.phase != widget.phase) _syncAnimations(widget.phase);
+  }
+
+  @override
+  void dispose() {
+    _breathCtrl.dispose();
+    _rippleCtrl.dispose();
+    _glowCtrl.dispose();
+    _ringCtrl.dispose();
+    _innerCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: SizedBox(
+        width: 260,
+        height: 260,
+        child: AnimatedBuilder(
+          animation: Listenable.merge(
+              [_breathCtrl, _rippleCtrl, _glowCtrl, _ringCtrl, _innerCtrl]),
+          builder: (_, __) => CustomPaint(
+            painter: _OrbPainter(
+              phase: widget.phase,
+              breathT: _breathCtrl.value,
+              rippleT: _rippleCtrl.value,
+              glowT: _glowCtrl.value,
+              ringT: _ringCtrl.value,
+              innerT: _innerCtrl.value,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OrbPainter extends CustomPainter {
+  final BuddyPhase phase;
+  final double breathT;
+  final double rippleT;
+  final double glowT;
+  final double ringT;
+  final double innerT;
+
+  _OrbPainter({
+    required this.phase,
+    required this.breathT,
+    required this.rippleT,
+    required this.glowT,
+    required this.ringT,
+    required this.innerT,
+  });
+
+  static const _idleColors = [Color(0xFF1DE9B6), Color(0xFF00ACC1)];
+  static const _listenColors = [Color(0xFF76FF03), Color(0xFF1DE9B6)];
+  static const _processColors = [Color(0xFF40C4FF), Color(0xFF5C6BC0)];
+  static const _playColors = [Color(0xFF64FFDA), Color(0xFF2979FF)];
+
+  List<Color> get _clrs {
+    if (phase == BuddyPhase.listening) return _listenColors;
+    if (phase == BuddyPhase.processing) return _processColors;
+    if (phase == BuddyPhase.playing) return _playColors;
+    return _idleColors;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final c = Offset(cx, cy);
+    final baseR = size.width * 0.30;
+    final scale = phase == BuddyPhase.idle ? 1.0 + breathT * 0.08 : 1.0;
+    final r = baseR * scale;
+    final clrs = _clrs;
+
+    _drawOuterAura(canvas, c, r, clrs);
+    if (phase == BuddyPhase.listening) _drawRipples(canvas, c, r, clrs);
+    if (phase == BuddyPhase.playing || phase == BuddyPhase.processing) {
+      _drawEnergyRings(canvas, c, r, clrs);
+    }
+    _drawCoreOrb(canvas, c, r, clrs);
+    _drawHighlight(canvas, c, r);
+    _drawEdgeGlow(canvas, c, r, clrs);
+  }
+
+  void _drawOuterAura(
+      Canvas canvas, Offset c, double r, List<Color> clrs) {
+    final auraR = r * 2.1;
+    final alpha = phase == BuddyPhase.idle
+        ? 0.07 + breathT * 0.05
+        : 0.12 + glowT * 0.08;
+    canvas.drawCircle(
+      c,
+      auraR,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          clrs[0].withValues(alpha: alpha),
+          clrs[1].withValues(alpha: alpha * 0.3),
+          clrs[1].withValues(alpha: 0),
+        ], stops: const [
+          0.0,
+          0.55,
+          1.0
+        ]).createShader(Rect.fromCircle(center: c, radius: auraR)),
+    );
+  }
+
+  void _drawRipples(
+      Canvas canvas, Offset c, double r, List<Color> clrs) {
+    for (int i = 0; i < 4; i++) {
+      final t = (rippleT + i * 0.25) % 1.0;
+      final rR = r * (1.08 + t * 1.9);
+      final a = (1.0 - t) * 0.55;
+      if (a < 0.01) continue;
+      canvas.drawCircle(
+        c,
+        rR,
+        Paint()
+          ..color = clrs[0].withValues(alpha: a)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5 * (1.0 - t),
+      );
+    }
+  }
+
+  void _drawEnergyRings(
+      Canvas canvas, Offset c, double r, List<Color> clrs) {
+    final ringR = r * 1.42;
+    final start = ringT * math.pi * 2;
+    // Outer soft glow arc
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: ringR),
+      start,
+      math.pi * 1.6,
+      false,
+      Paint()
+        ..color = clrs[0].withValues(alpha: 0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 12
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+    // Bright leading arc
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: ringR),
+      start,
+      math.pi * 1.6,
+      false,
+      Paint()
+        ..color = clrs[0].withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round,
+    );
+    // Counter-rotating inner arc
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: r * 1.22),
+      -start * 0.65,
+      math.pi * 0.85,
+      false,
+      Paint()
+        ..color = clrs[1].withValues(alpha: 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  void _drawCoreOrb(
+      Canvas canvas, Offset c, double r, List<Color> clrs) {
+    // Fluid internal gradient that slowly orbits
+    final gx = math.cos(innerT * math.pi * 2) * 0.28;
+    final gy = math.sin(innerT * math.pi * 2) * 0.28;
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..shader = RadialGradient(
+          center: Alignment(gx, gy),
+          colors: [
+            Colors.white.withValues(alpha: 0.95),
+            clrs[0],
+            clrs[1],
+          ],
+          stops: const [0.0, 0.42, 1.0],
+        ).createShader(Rect.fromCircle(center: c, radius: r)),
+    );
+    // Fluid boundary ring when listening
+    if (phase == BuddyPhase.listening) {
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..color = clrs[0].withValues(alpha: 0.2 + glowT * 0.15)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+      );
+    }
+  }
+
+  void _drawHighlight(Canvas canvas, Offset c, double r) {
+    final h = Offset(c.dx - r * 0.27, c.dy - r * 0.27);
+    canvas.drawCircle(
+      h,
+      r * 0.30,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: 0.7),
+          Colors.white.withValues(alpha: 0.0),
+        ]).createShader(Rect.fromCircle(center: h, radius: r * 0.30)),
+    );
+  }
+
+  void _drawEdgeGlow(
+      Canvas canvas, Offset c, double r, List<Color> clrs) {
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..color = clrs[0].withValues(alpha: 0.40 + glowT * 0.20)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_OrbPainter old) => true;
 }
 
 // ─── Phase label ──────────────────────────────────────────────────────────────
@@ -370,6 +604,7 @@ class _BottomControls extends StatelessWidget {
     // ── Not started yet ──
     if (!conversationActive) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           ElevatedButton.icon(
             onPressed: onStart,
@@ -403,6 +638,7 @@ class _BottomControls extends StatelessWidget {
     // ── Idle — show Start Talking button ──
     if (phase == BuddyPhase.idle) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           GestureDetector(
             onTap: onStartTalking,
@@ -435,6 +671,7 @@ class _BottomControls extends StatelessWidget {
     // ── Listening — show Stop Talking button ──
     if (phase == BuddyPhase.listening) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           GestureDetector(
             onTap: onStopTalking,
@@ -466,6 +703,7 @@ class _BottomControls extends StatelessWidget {
     // ── AI is speaking — show Interrupt button ──
     if (phase == BuddyPhase.playing) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           GestureDetector(
             onTap: onInterrupt,
