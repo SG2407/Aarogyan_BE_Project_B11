@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/voice_text_field.dart';
 import '../../data/consultation_repository.dart';
 
 class SessionDetailScreen extends ConsumerStatefulWidget {
@@ -173,11 +174,10 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               _SectionCard(
                 title: 'Symptoms',
                 child: _editing
-                    ? TextFormField(
+                    ? VoiceTextField(
                         controller: _symptomsCtrl,
+                        hintText: 'e.g. fever, headache',
                         maxLines: 3,
-                        decoration: const InputDecoration(
-                            hintText: 'e.g. fever, headache'),
                       )
                     : _TextView(text: session['symptoms']),
               ),
@@ -187,11 +187,10 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               _SectionCard(
                 title: 'Diagnosis',
                 child: _editing
-                    ? TextFormField(
+                    ? VoiceTextField(
                         controller: _diagnosisCtrl,
+                        hintText: 'e.g. Viral fever',
                         maxLines: 2,
-                        decoration:
-                            const InputDecoration(hintText: 'e.g. Viral fever'),
                       )
                     : _TextView(text: session['diagnosis']),
               ),
@@ -201,11 +200,10 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               _SectionCard(
                 title: 'Medications',
                 child: _editing
-                    ? TextFormField(
+                    ? VoiceTextField(
                         controller: _medicationsCtrl,
+                        hintText: 'e.g. Paracetamol 500mg - twice daily',
                         maxLines: 3,
-                        decoration: const InputDecoration(
-                            hintText: 'e.g. Paracetamol 500mg - twice daily'),
                       )
                     : _TextView(text: session['medications']),
               ),
@@ -215,11 +213,10 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
               _SectionCard(
                 title: 'Doctor Notes',
                 child: _editing
-                    ? TextFormField(
+                    ? VoiceTextField(
                         controller: _notesCtrl,
+                        hintText: 'Any additional notes...',
                         maxLines: 4,
-                        decoration: const InputDecoration(
-                            hintText: 'Any additional notes...'),
                       )
                     : _TextView(text: session['doctor_notes']),
               ),

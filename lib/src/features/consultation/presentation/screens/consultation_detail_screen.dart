@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/voice_text_field.dart';
 import '../../data/consultation_repository.dart';
 
 class ConsultationDetailScreen extends ConsumerWidget {
@@ -127,13 +128,13 @@ class ConsultationDetailScreen extends ConsumerWidget {
                 label: 'Date of Visit',
               ),
               const SizedBox(height: 14),
-              _buildField(symptomsCtrl, 'Symptoms', maxLines: 3),
+              _buildVoiceField(symptomsCtrl, 'Symptoms', maxLines: 3),
               const SizedBox(height: 14),
-              _buildField(diagnosisCtrl, 'Diagnosis', maxLines: 2),
+              _buildVoiceField(diagnosisCtrl, 'Diagnosis', maxLines: 2),
               const SizedBox(height: 14),
-              _buildField(medicationsCtrl, 'Medications', maxLines: 3),
+              _buildVoiceField(medicationsCtrl, 'Medications', maxLines: 3),
               const SizedBox(height: 14),
-              _buildField(notesCtrl, 'Doctor Notes', maxLines: 4),
+              _buildVoiceField(notesCtrl, 'Doctor Notes', maxLines: 4),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () async {
@@ -170,12 +171,12 @@ class ConsultationDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildField(TextEditingController ctrl, String label,
+  Widget _buildVoiceField(TextEditingController ctrl, String label,
       {int maxLines = 1}) {
-    return TextFormField(
+    return VoiceTextField(
       controller: ctrl,
+      labelText: label,
       maxLines: maxLines,
-      decoration: InputDecoration(labelText: label),
     );
   }
 }

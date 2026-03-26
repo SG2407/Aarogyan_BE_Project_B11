@@ -43,6 +43,9 @@ dependencies:
   path_provider: ^2.1.5
   open_file: ^3.5.10
 
+  # Speech-to-text (voice input for forms)
+  speech_to_text: ^7.0.0
+
   # Audio (for Orbz voice)
   record: ^5.2.0
   just_audio: ^0.10.4

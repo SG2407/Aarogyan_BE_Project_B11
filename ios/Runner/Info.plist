@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Aarogyan uses the microphone to let you dictate symptoms and medical notes.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Aarogyan uses speech recognition to convert your voice into medical notes.</string>
 </dict>
 </plist>
