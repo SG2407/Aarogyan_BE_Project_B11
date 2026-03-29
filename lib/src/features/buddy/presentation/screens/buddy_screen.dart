@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:record/record.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
@@ -27,6 +28,7 @@ class BuddyStateData {
   final String? lastReply;
   final List<ConversationTurn> history;
   final String? error;
+  final double soundLevel; // 0.0–1.0, driven by mic input while listening
 
   const BuddyStateData({
     this.phase = BuddyPhase.idle,
@@ -35,6 +37,7 @@ class BuddyStateData {
     this.lastReply,
     this.history = const [],
     this.error,
+    this.soundLevel = 0.0,
   });
 
   BuddyStateData copyWith({
@@ -44,6 +47,7 @@ class BuddyStateData {
     String? lastReply,
     List<ConversationTurn>? history,
     String? error,
+    double? soundLevel,
   }) {
     return BuddyStateData(
       phase: phase ?? this.phase,
@@ -52,65 +56,154 @@ class BuddyStateData {
       lastReply: lastReply ?? this.lastReply,
       history: history ?? this.history,
       error: error,
+      soundLevel: soundLevel ?? this.soundLevel,
     );
   }
 }
 
 // ─── Notifier ─────────────────────────────────────────────────────────────────
 class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
-  final _recorder = AudioRecorder();
+  final _speech = stt.SpeechToText();
   final _player = AudioPlayer();
-  String? _recordingPath;
+
+  bool _speechInitialised = false;
+  bool _disposed = false;
+
+  /// Partial transcript while speech-to-text is running
+  String _partialTranscript = '';
 
   @override
   BuddyStateData build() {
     ref.onDispose(() {
-      _recorder.dispose();
+      _disposed = true;
+      _speech.stop();
       _player.dispose();
     });
     return const BuddyStateData();
   }
 
-  /// "Start Conversation" — activates the UI, ready for first input
+  // ── Public API ──────────────────────────────────────────────────────────────
+
+  /// Called when user taps "Start Conversation".
+  /// Initialises on-device STT and immediately starts listening.
   Future<void> startConversation() async {
-    state = state.copyWith(conversationActive: true, history: [], error: null);
-  }
-
-  /// "Start Talking" — user taps mic button, begin recording
-  Future<void> startTalking() async {
-    if (!await _recorder.hasPermission()) {
-      state = state.copyWith(
-        phase: BuddyPhase.idle,
-        error: 'Microphone permission denied',
-      );
-      return;
+    _set(state.copyWith(
+      conversationActive: true,
+      history: [],
+      error: null,
+      soundLevel: 0.0,
+    ));
+    await _initSpeech();
+    if (_speechInitialised) {
+      await _startListening();
+    } else {
+      _set(state.copyWith(
+        error: 'Microphone permission denied or Speech not available.',
+      ));
     }
-
-    final dir = await getTemporaryDirectory();
-    _recordingPath =
-        '${dir.path}/buddy_${DateTime.now().millisecondsSinceEpoch}.m4a';
-
-    await _recorder.start(
-      const RecordConfig(encoder: AudioEncoder.aacLc),
-      path: _recordingPath!,
-    );
-
-    state = state.copyWith(phase: BuddyPhase.listening, error: null);
   }
 
-  /// "Stop Talking" — user taps stop button, send audio to backend
-  Future<void> stopTalking() async {
-    final path = await _recorder.stop();
-    if (path == null) return;
+  /// Called when user taps the interrupt button during playback.
+  Future<void> interrupt() async {
+    await _player.stop();
+    _set(state.copyWith(phase: BuddyPhase.idle, soundLevel: 0.0));
+    await _startListening();
+  }
 
-    state = state.copyWith(phase: BuddyPhase.processing);
+  Future<void> endConversation() async {
+    await _speech.stop();
+    await _player.stop();
+    _partialTranscript = '';
+    _set(const BuddyStateData());
+  }
+
+  // ── Internal helpers ────────────────────────────────────────────────────────
+
+  void _set(BuddyStateData s) {
+    if (!_disposed) state = s;
+  }
+
+  Future<void> _initSpeech() async {
+    if (_speechInitialised) return;
+    _speechInitialised = await _speech.initialize(
+      onStatus: _onSpeechStatus,
+      onError: (e) {
+        if (_disposed) return;
+        _set(state.copyWith(
+          phase: BuddyPhase.idle,
+          error: 'Speech error: ${e.errorMsg}',
+          soundLevel: 0.0,
+        ));
+      },
+    );
+  }
+
+  /// Start on-device speech recognition.
+  /// `pauseFor` acts as the on-device VAD — auto-finalises after 2 s of silence.
+  Future<void> _startListening() async {
+    if (_disposed || !state.conversationActive) return;
+    if (!_speechInitialised) return;
+
+    _partialTranscript = '';
+    _set(state.copyWith(phase: BuddyPhase.listening, error: null, soundLevel: 0.0));
+
+    await _speech.listen(
+      onResult: _onResult,
+      listenFor: const Duration(seconds: 60),
+      pauseFor: const Duration(seconds: 2),
+      onSoundLevelChange: (level) {
+        // SpeechToText reports roughly –2..10 dB; normalise to 0..1
+        final norm = ((level + 2) / 12).clamp(0.0, 1.0);
+        _set(state.copyWith(soundLevel: norm));
+      },
+      listenOptions: stt.SpeechListenOptions(
+        cancelOnError: false,
+        partialResults: true,
+      ),
+    );
+  }
+
+  /// Called on every partial/final recognition event.
+  void _onResult(SpeechRecognitionResult result) {
+    if (_disposed) return;
+    _partialTranscript = result.recognizedWords;
+
+    if (result.finalResult && _partialTranscript.trim().isNotEmpty) {
+      _processText(_partialTranscript.trim());
+    }
+  }
+
+  /// SpeechToText status callback — 'done' fires when `pauseFor` silence is
+  /// reached without a `finalResult=true` callback arriving first.
+  void _onSpeechStatus(String status) {
+    if (_disposed) return;
+    if (status == 'done' &&
+        state.phase == BuddyPhase.listening &&
+        _partialTranscript.trim().isNotEmpty) {
+      _processText(_partialTranscript.trim());
+    }
+  }
+
+  /// Send recognised text to backend, play the response, then loop back to
+  /// listening — completing the fully autonomous conversation cycle.
+  Future<void> _processText(String userText) async {
+    if (_disposed) return;
+    await _speech.stop();
+    _partialTranscript = '';
+
+    _set(state.copyWith(
+      phase: BuddyPhase.processing,
+      lastUserText: userText,
+      soundLevel: 0.0,
+    ));
 
     try {
       final repo = ref.read(buddyRepositoryProvider);
       final historyMaps = state.history.map((t) => t.toMap()).toList();
-      final result = await repo.sendVoice(path, historyMaps);
+      final result = await repo.sendText(userText, historyMaps);
 
-      final userText = result['user_text'] as String? ?? '';
+      if (_disposed) return;
+
       final reply = result['buddy_text'] as String? ?? '';
       final audioBase64 = result['audio_base64'] as String?;
 
@@ -119,43 +212,42 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
         ConversationTurn(role: 'user', content: userText),
         ConversationTurn(role: 'assistant', content: reply),
       ];
-      final trimmed = newHistory.length > 10
-          ? newHistory.sublist(newHistory.length - 10)
+      // Keep last 10 turns (20 messages) to bound context size
+      final trimmed = newHistory.length > 20
+          ? newHistory.sublist(newHistory.length - 20)
           : newHistory;
 
-      state = state.copyWith(
+      _set(state.copyWith(
         phase: BuddyPhase.playing,
-        lastUserText: userText,
         lastReply: reply,
         history: trimmed,
         error: null,
-      );
+      ));
 
       if (audioBase64 != null && audioBase64.isNotEmpty) {
         await _playBase64Audio(audioBase64);
       }
 
+      // Auto-loop: restart listening once audio finishes
+      if (_disposed) return;
       if (state.conversationActive && state.phase == BuddyPhase.playing) {
-        state = state.copyWith(phase: BuddyPhase.idle);
+        await _startListening();
       }
     } catch (e) {
+      if (_disposed) return;
       String msg = 'Something went wrong — please try again.';
       if (e is DioException) {
-        final status = e.response?.statusCode;
         final detail = e.response?.data is Map
             ? (e.response!.data as Map)['detail'] ?? e.message
             : e.message;
-        msg = 'Error $status: $detail';
+        msg = 'Error ${e.response?.statusCode}: $detail';
       }
-      state = state.copyWith(
-        phase: BuddyPhase.idle,
-        error: msg,
-      );
-    } finally {
-      try {
-        final f = File(path);
-        if (await f.exists()) await f.delete();
-      } catch (_) {}
+      _set(state.copyWith(phase: BuddyPhase.idle, error: msg));
+      // Auto-recover to listening after a brief pause
+      await Future.delayed(const Duration(seconds: 2));
+      if (!_disposed && state.conversationActive) {
+        await _startListening();
+      }
     }
   }
 
@@ -171,18 +263,6 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
           s.processingState == ProcessingState.completed ||
           s.processingState == ProcessingState.idle,
     );
-  }
-
-  /// Interrupt AI mid-speech → return to idle
-  Future<void> interrupt() async {
-    await _player.stop();
-    state = state.copyWith(phase: BuddyPhase.idle);
-  }
-
-  Future<void> endConversation() async {
-    await _recorder.cancel();
-    await _player.stop();
-    state = const BuddyStateData();
   }
 }
 
@@ -217,10 +297,19 @@ class BuddyScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Spacer(),
-              Center(child: _OrbzAvatar(phase: s.phase)),
+              Center(
+                child: _OrbzAvatar(
+                  phase: s.phase,
+                  soundLevel: s.soundLevel,
+                ),
+              ),
               const SizedBox(height: 28),
               _PhaseLabel(
-                  phase: s.phase, conversationActive: s.conversationActive),
+                phase: s.phase,
+                conversationActive: s.conversationActive,
+                lastUserText: s.lastUserText,
+                lastReply: s.lastReply,
+              ),
               const SizedBox(height: 20),
               if (s.error != null)
                 Padding(
@@ -239,8 +328,6 @@ class BuddyScreen extends ConsumerWidget {
                 phase: s.phase,
                 conversationActive: s.conversationActive,
                 onStart: notifier.startConversation,
-                onStartTalking: notifier.startTalking,
-                onStopTalking: notifier.stopTalking,
                 onInterrupt: notifier.interrupt,
               ),
               const SizedBox(height: 24),
@@ -255,7 +342,8 @@ class BuddyScreen extends ConsumerWidget {
 // ─── Orbz Avatar ──────────────────────────────────────────────────────────────
 class _OrbzAvatar extends StatefulWidget {
   final BuddyPhase phase;
-  const _OrbzAvatar({required this.phase});
+  final double soundLevel;
+  const _OrbzAvatar({required this.phase, this.soundLevel = 0.0});
 
   @override
   State<_OrbzAvatar> createState() => _OrbzAvatarState();
@@ -341,6 +429,7 @@ class _OrbzAvatarState extends State<_OrbzAvatar>
               glowT: _glowCtrl.value,
               ringT: _ringCtrl.value,
               innerT: _innerCtrl.value,
+              soundLevel: widget.soundLevel,
             ),
           ),
         ),
@@ -356,6 +445,7 @@ class _OrbPainter extends CustomPainter {
   final double glowT;
   final double ringT;
   final double innerT;
+  final double soundLevel;
 
   _OrbPainter({
     required this.phase,
@@ -364,6 +454,7 @@ class _OrbPainter extends CustomPainter {
     required this.glowT,
     required this.ringT,
     required this.innerT,
+    this.soundLevel = 0.0,
   });
 
   static const _idleColors = [Color(0xFF1DE9B6), Color(0xFF00ACC1)];
@@ -384,7 +475,14 @@ class _OrbPainter extends CustomPainter {
     final cy = size.height / 2;
     final c = Offset(cx, cy);
     final baseR = size.width * 0.30;
-    final scale = phase == BuddyPhase.idle ? 1.0 + breathT * 0.08 : 1.0;
+    final double scale;
+    if (phase == BuddyPhase.listening) {
+      scale = 1.0 + soundLevel * 0.18;
+    } else if (phase == BuddyPhase.idle) {
+      scale = 1.0 + breathT * 0.08;
+    } else {
+      scale = 1.0;
+    }
     final r = baseR * scale;
     final clrs = _clrs;
 
@@ -542,34 +640,132 @@ class _OrbPainter extends CustomPainter {
 class _PhaseLabel extends StatelessWidget {
   final BuddyPhase phase;
   final bool conversationActive;
-  const _PhaseLabel({required this.phase, required this.conversationActive});
+  final String? lastUserText;
+  final String? lastReply;
 
-  String _label() {
-    if (!conversationActive) return 'Tap below to start talking with Orbz';
+  const _PhaseLabel({
+    required this.phase,
+    required this.conversationActive,
+    this.lastUserText,
+    this.lastReply,
+  });
+
+  String _headline() {
+    if (!conversationActive) return 'Tap below to begin';
     switch (phase) {
       case BuddyPhase.idle:
-        return 'Tap below to start talking with Orbz';
+        return 'Starting…';
       case BuddyPhase.listening:
-        return 'Listening...';
+        return 'Listening…';
       case BuddyPhase.processing:
-        return 'Orbz is thinking...';
+        return 'Orbz is thinking…';
       case BuddyPhase.playing:
-        return 'Orbz is speaking...';
+        return 'Orbz is speaking…';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
-      child: Text(
-        _label(),
-        key: ValueKey(_label()),
-        style: Theme.of(context)
-            .textTheme
-            .headlineSmall
-            ?.copyWith(color: AppColors.primary),
-        textAlign: TextAlign.center,
+    final caption = phase == BuddyPhase.listening
+        ? 'Speak freely — Orbz will respond when you pause'
+        : phase == BuddyPhase.playing
+            ? 'Tap the mic icon below to interrupt'
+            : null;
+
+    return Column(
+      children: [
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: Text(
+            _headline(),
+            key: ValueKey(_headline()),
+            style: Theme.of(context)
+                .textTheme
+                .headlineSmall
+                ?.copyWith(color: AppColors.primary),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        if (caption != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            caption,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.55),
+                ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+        if (lastUserText != null && conversationActive) ...[
+          const SizedBox(height: 16),
+          _TranscriptChip(userText: lastUserText!, reply: lastReply),
+        ],
+      ],
+    );
+  }
+}
+
+class _TranscriptChip extends StatelessWidget {
+  final String userText;
+  final String? reply;
+  const _TranscriptChip({required this.userText, this.reply});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.person_rounded,
+                  size: 14, color: AppColors.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  userText,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          if (reply != null && reply!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.auto_awesome_rounded,
+                    size: 14, color: Color(0xFF1DE9B6)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    reply!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.7),
+                        ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -580,22 +776,18 @@ class _BottomControls extends StatelessWidget {
   final BuddyPhase phase;
   final bool conversationActive;
   final VoidCallback onStart;
-  final VoidCallback onStartTalking;
-  final VoidCallback onStopTalking;
   final VoidCallback onInterrupt;
 
   const _BottomControls({
     required this.phase,
     required this.conversationActive,
     required this.onStart,
-    required this.onStartTalking,
-    required this.onStopTalking,
     required this.onInterrupt,
   });
 
   @override
   Widget build(BuildContext context) {
-    // ── Not started yet ──
+    // ── Not started ──
     if (!conversationActive) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -607,7 +799,8 @@ class _BottomControls extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(32)),
               textStyle:
@@ -616,7 +809,7 @@ class _BottomControls extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Start a conversation with your emotional buddy',
+            'One tap — then just speak naturally',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context)
                       .colorScheme
@@ -629,112 +822,128 @@ class _BottomControls extends StatelessWidget {
       );
     }
 
-    // ── Idle — show Start Talking button ──
-    if (phase == BuddyPhase.idle) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          GestureDetector(
-            onTap: onStartTalking,
-            child: Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.primary, width: 2),
-              ),
-              child: const Icon(Icons.mic_rounded,
-                  color: AppColors.primary, size: 30),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Tap to start talking',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.5),
-                ),
-          ),
-        ],
-      );
-    }
-
-    // ── Listening — show Stop Talking button ──
+    // ── Listening — no button, show animated sound-wave indicator ──
     if (phase == BuddyPhase.listening) {
       return Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          GestureDetector(
-            onTap: onStopTalking,
-            child: Container(
-              width: 72,
-              height: 72,
-              decoration: const BoxDecoration(
-                color: Color(0xFFE53935),
-                shape: BoxShape.circle,
-              ),
-              child:
-                  const Icon(Icons.stop_rounded, color: Colors.white, size: 30),
-            ),
-          ),
-          const SizedBox(height: 10),
+          const _SoundWaveIndicator(),
+          const SizedBox(height: 8),
           Text(
-            'Tap to stop and send',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            'Pause speaking for 2 s to send',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: Theme.of(context)
                       .colorScheme
                       .onSurface
-                      .withValues(alpha: 0.5),
+                      .withValues(alpha: 0.4),
                 ),
           ),
         ],
       );
     }
 
-    // ── AI is speaking — show Interrupt button ──
+    // ── Playing — interrupt button ──
     if (phase == BuddyPhase.playing) {
       return Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           GestureDetector(
             onTap: onInterrupt,
             child: Container(
-              width: 72,
-              height: 72,
+              width: 64,
+              height: 64,
               decoration: BoxDecoration(
                 color: AppColors.error.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.error, width: 2),
               ),
               child: const Icon(Icons.mic_rounded,
-                  color: AppColors.error, size: 30),
+                  color: AppColors.error, size: 28),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
-            'Tap to interrupt and speak',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            'Tap to interrupt',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: Theme.of(context)
                       .colorScheme
                       .onSurface
-                      .withValues(alpha: 0.5),
+                      .withValues(alpha: 0.4),
                 ),
           ),
         ],
       );
     }
 
-    // ── Processing — spinner hint, no button ──
-    return Text(
-      'Processing your message...',
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color:
-                Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-          ),
-      textAlign: TextAlign.center,
+    // ── Processing / idle spinner ──
+    return Column(
+      children: [
+        const SizedBox(
+          width: 32,
+          height: 32,
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Please wait…',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.4),
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Animated sound-wave indicator shown while listening ──────────────────────
+class _SoundWaveIndicator extends StatefulWidget {
+  const _SoundWaveIndicator();
+
+  @override
+  State<_SoundWaveIndicator> createState() => _SoundWaveIndicatorState();
+}
+
+class _SoundWaveIndicatorState extends State<_SoundWaveIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(5, (i) {
+            final t = (_ctrl.value + i * 0.2) % 1.0;
+            final h = 6.0 + 18.0 * math.sin(t * math.pi);
+            return Container(
+              width: 4,
+              height: h,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }

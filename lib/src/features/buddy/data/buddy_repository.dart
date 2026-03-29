@@ -8,8 +8,28 @@ class BuddyRepository {
   final Dio _dio;
   BuddyRepository(this._dio);
 
-  /// Send audio file to /buddy/voice with conversation history.
-  /// Returns {user_text, buddy_text, mood_score, emotion, audio_base64}.
+  /// Primary autonomous path — sends transcribed text, receives AI reply + audio.
+  /// Latency is considerably lower than sendVoice because audio upload and
+  /// server-side STT are eliminated entirely.
+  Future<Map<String, dynamic>> sendText(
+    String text,
+    List<Map<String, String>> history,
+  ) async {
+    final resp = await _dio.post(
+      '/buddy/chat',
+      data: {
+        'text': text,
+        'history': history,
+      },
+      options: Options(
+        receiveTimeout: const Duration(minutes: 3),
+        sendTimeout: const Duration(seconds: 10),
+      ),
+    );
+    return resp.data as Map<String, dynamic>;
+  }
+
+  /// Legacy audio path — kept for future use or fallback.
   Future<Map<String, dynamic>> sendVoice(
     String audioFilePath,
     List<Map<String, String>> history,
