@@ -133,11 +133,13 @@ async def chat(
     ).execute()
 
     # Call AI
-    ai_reply = await chat_with_ai(
+    ai_result = await chat_with_ai(
         user_message=body.message,
         history=history,
         profile_context=profile_context,
     )
+    ai_reply = ai_result["reply"]
+    ai_sources = ai_result.get("sources", [])
 
     # Save assistant message
     db.table("messages").insert(
@@ -159,4 +161,5 @@ async def chat(
     return {
         "conversation_id": conversation_id,
         "reply": ai_reply,
+        "sources": ai_sources,
     }

@@ -4,6 +4,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../data/assistant_repository.dart';
 
 // Per-conversation chat state: list of message maps
+// Each message: {role, content, sources?}
 class ChatNotifier
     extends AutoDisposeFamilyAsyncNotifier<List<Map<String, dynamic>>, String> {
   @override
@@ -25,11 +26,17 @@ class ChatNotifier
             conversationId: conversationId,
             message: text,
           );
+      final sources = (resp['sources'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .where((s) => s.trim().isNotEmpty)
+              .toList() ??
+          [];
       state = AsyncData([
         ...state.valueOrNull ?? current,
         {
           'role': 'assistant',
-          'content': resp['reply'] ?? resp['message'] ?? ''
+          'content': resp['reply'] ?? resp['message'] ?? '',
+          'sources': sources,
         },
       ]);
     } catch (e) {
@@ -129,9 +136,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   itemCount: messages.length,
                   itemBuilder: (_, i) {
                     final msg = messages[i];
+                    final sources = (msg['sources'] as List<dynamic>?)
+                            ?.map((e) => e.toString())
+                            .toList() ??
+                        [];
                     return _MessageBubble(
                       role: msg['role'] ?? 'user',
                       content: msg['content'] ?? '',
+                      sources: sources,
                     );
                   },
                 );
@@ -182,33 +194,163 @@ class _WelcomeBanner extends StatelessWidget {
 class _MessageBubble extends StatelessWidget {
   final String role;
   final String content;
-  const _MessageBubble({required this.role, required this.content});
+  final List<String> sources;
+  const _MessageBubble(
+      {required this.role, required this.content, this.sources = const []});
 
   @override
   Widget build(BuildContext context) {
     final isUser = role == 'user';
+    final hasSources = !isUser && sources.isNotEmpty;
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
+      child: Column(
+        crossAxisAlignment:
+            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.78,
+            ),
+            margin: EdgeInsets.only(
+              top: 6,
+              bottom: hasSources ? 2 : 6,
+            ),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isUser
+                  ? AppColors.primary
+                  : Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(20),
+                topRight: const Radius.circular(20),
+                bottomLeft: Radius.circular(isUser ? 20 : 4),
+                bottomRight: Radius.circular(isUser ? 4 : 20),
+              ),
+            ),
+            child: Text(
+              content,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: isUser
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.onSurface,
+                  ),
+            ),
+          ),
+          if (hasSources)
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 6),
+              child: _SourcesButton(sources: sources),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SourcesButton extends StatelessWidget {
+  final List<String> sources;
+  const _SourcesButton({required this.sources});
+
+  void _showSources(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                const Icon(Icons.menu_book_rounded,
+                    size: 18, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Sources',
+                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...sources.asMap().entries.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${e.key + 1}.',
+                          style:
+                              Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primary,
+                                  ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            e.value,
+                            style: Theme.of(ctx).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ],
         ),
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showSources(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: isUser ? AppColors.primary : Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(20),
-            topRight: const Radius.circular(20),
-            bottomLeft: Radius.circular(isUser ? 20 : 4),
-            bottomRight: Radius.circular(isUser ? 4 : 20),
+          color: AppColors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.2),
           ),
         ),
-        child: Text(
-          content,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: isUser ? Colors.white : Theme.of(context).colorScheme.onSurface,
-              ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.menu_book_rounded,
+                size: 12,
+                color: AppColors.primary.withValues(alpha: 0.8)),
+            const SizedBox(width: 4),
+            Text(
+              'Sources',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppColors.primary.withValues(alpha: 0.8),
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
         ),
       ),
     );
@@ -278,3 +420,4 @@ class _InputBar extends StatelessWidget {
     );
   }
 }
+

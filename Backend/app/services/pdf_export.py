@@ -2,9 +2,15 @@
 PDF export service — generates a full consultation PDF report.
 Uses fpdf2 for clean, structured output.
 """
+import io
+import os
+import logging
+import httpx
 from fpdf import FPDF
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Core fonts (Helvetica etc.) only support latin-1.
 # Replace common Unicode punctuation with safe ASCII equivalents.
@@ -56,6 +62,27 @@ class AarogyanPDF(FPDF):
         self.set_text_color(51, 51, 51)
         self.multi_cell(self.epw - label_w, 7, _s(str(value) if value is not None else "-"))
 
+    def doc_link_row(self, name: str, url: str):
+        """Render a document row with a wrapped, clickable URL."""
+        # File name line
+        self.set_font("Helvetica", "", 9)
+        self.set_text_color(80, 80, 80)
+        self.set_x(self.l_margin + 4)
+        self.cell(0, 6, _s(f"\u2022 {name}"), new_x="LMARGIN", new_y="NEXT")
+        if url:
+            # Clickable "View Document" label + wrapped URL on next line
+            self.set_x(self.l_margin + 8)
+            self.set_font("Helvetica", "U", 8)
+            self.set_text_color(26, 107, 90)
+            safe_url = url if url.startswith("http") else ""
+            self.cell(0, 5, _s("View Document"), link=safe_url, new_x="LMARGIN", new_y="NEXT")
+            # URL text wrapped — helps users who copy from PDF
+            self.set_font("Helvetica", "I", 7)
+            self.set_text_color(120, 120, 120)
+            self.set_x(self.l_margin + 8)
+            self.multi_cell(self.epw - 8, 4, _s(url))
+        self.set_text_color(26, 26, 46)
+
     def divider(self):
         self.set_draw_color(200, 220, 215)
         self.line(10, self.get_y(), 200, self.get_y())
@@ -96,14 +123,33 @@ async def generate_consultation_pdf(
                 pdf.set_text_color(26, 26, 46)
                 pdf.cell(0, 7, _s("Attached Documents:"), new_x="LMARGIN", new_y="NEXT")
                 for doc in docs:
-                    pdf.set_font("Helvetica", "", 9)
-                    pdf.set_text_color(80, 80, 80)
                     name = doc.get("file_name", "Unknown file")
-                    url = doc.get("public_url", "")
-                    pdf.cell(0, 6, _s(f"  * {name}"), new_x="LMARGIN", new_y="NEXT")
-                    if url:
-                        pdf.set_text_color(26, 107, 90)
-                        pdf.cell(0, 5, _s(f"    {url}"), new_x="LMARGIN", new_y="NEXT")
+                    url = doc.get("public_url", "") or ""
+                    ext = os.path.splitext(name)[1].lower()
+
+                    # Try embedding images directly into the PDF
+                    embedded = False
+                    if ext in (".jpg", ".jpeg", ".png") and url.startswith("https://"):
+                        try:
+                            async with httpx.AsyncClient(timeout=15.0) as client:
+                                img_resp = await client.get(url)
+                                img_resp.raise_for_status()
+                            img_bytes = img_resp.content
+                            img_io = io.BytesIO(img_bytes)
+                            # Reserve space and embed; max width = 160mm, keep aspect
+                            pdf.set_font("Helvetica", "I", 9)
+                            pdf.set_text_color(80, 80, 80)
+                            pdf.set_x(pdf.l_margin + 4)
+                            pdf.cell(0, 6, _s(f"\u2022 {name} (embedded)"), new_x="LMARGIN", new_y="NEXT")
+                            pdf.image(img_io, x=pdf.l_margin + 8, w=min(160, pdf.epw - 8))
+                            pdf.ln(3)
+                            embedded = True
+                        except Exception as fetch_err:
+                            logger.warning("Could not embed image %s: %s", name, fetch_err)
+
+                    if not embedded:
+                        pdf.doc_link_row(name, url)
+
                 pdf.set_text_color(26, 26, 46)
 
             if i < len(sessions):
