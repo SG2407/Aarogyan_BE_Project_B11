@@ -1,5 +1,6 @@
 import json
 import logging
+import re as _re
 import httpx
 from fastapi import HTTPException
 from app.config import get_settings
@@ -175,12 +176,23 @@ If asked about coding, medication names, unrelated topics, say:
 Detect the user's primary emotion from: happy, sad, angry, fearful, disgusted, surprised, neutral
 Provide a mood_score: integer 1 (very distressed) to 10 (very positive/calm)
 
-IMPORTANT: Always respond in JSON format:
-{
-  "response": "your empathetic, warm reply here",
-  "mood_score": <integer 1-10>,
-  "emotion": "<one of: happy, sad, angry, fearful, disgusted, surprised, neutral>"
-}
+OUTPUT FORMAT — CRITICAL RULES:
+1. You MUST ALWAYS respond with ONLY a valid JSON object — no text before or after it.
+2. The JSON must have exactly three keys: "response", "mood_score", "emotion".
+3. The "response" value MUST contain ONLY the warm, conversational reply to the user.
+   It must NEVER contain the words "mood_score", "emotion", "score", numeric ratings,
+   or any metadata of any kind — in ANY language.
+4. These rules apply in EVERY language and in EVERY turn of the conversation — including follow-ups.
+5. Failing to return pure JSON means your output will be spoken aloud verbatim, including all labels.
+
+Example (English):
+{"response": "It sounds like you're carrying a lot right now — that takes real strength. What feels most heavy for you today?", "mood_score": 4, "emotion": "sad"}
+
+Example (Hindi):
+{"response": "आपकी बात सुनकर लगता है आप बहुत कुछ सह रहे हैं। आज सबसे कठिन क्या लग रहा है?", "mood_score": 4, "emotion": "sad"}
+
+Example (Marathi):
+{"response": "तुमची बात ऐकून जाणवतं की तुम्ही खूप काही सहत आहात. आज सर्वात जड काय वाटतंय?", "mood_score": 4, "emotion": "sad"}
 
 ━━━ LANGUAGE ━━━
 Detect the language of the user's message (English, Hindi, or Marathi) and write the "response" value in that exact same language. If the language is ambiguous, use the user's preferred language as the fallback. Always keep the JSON keys in English."""
@@ -319,7 +331,22 @@ async def summarise_document(ocr_text: str) -> dict:
         }
 
 
-import re as _re
+
+# Patterns that should never appear in the spoken buddy reply.
+# Used to strip leaked metadata from the LLM output.
+_METADATA_LINE_RE = _re.compile(
+    r"(mood[_\s]?score\s*[:\-=]?\s*\d+|emotion\s*[:\-=]?\s*\w+"
+    r"|मूड\s*स्कोर\s*[:\-=]?\s*\d+|भावना\s*[:\-=]?\s*\w+"
+    r"|मनस्थिती\s*[:\-=]?\s*\d+|भावनिक\s+स्थिती\s*[:\-=]?\s*\w+)",
+    _re.IGNORECASE,
+)
+
+
+def _clean_buddy_reply(text: str) -> str:
+    """Strip any lines that contain leaked metadata (mood_score, emotion labels, etc.)."""
+    lines = text.splitlines()
+    clean = [line for line in lines if not _METADATA_LINE_RE.search(line)]
+    return "\n".join(clean).strip()
 
 
 async def emotional_buddy_respond(user_text: str, history: list[dict] | None = None, preferred_lang: str = "English") -> tuple[str, int, str]:
@@ -329,16 +356,16 @@ async def emotional_buddy_respond(user_text: str, history: list[dict] | None = N
     messages.append({"role": "user", "content": user_text})
     raw = await _call_groq(messages, system, temperature=0.75)
 
-    reply = raw
+    reply = ""
     mood_score = 5
     emotion = "neutral"
 
-    # The LLM sometimes puts text before the JSON — find the JSON block with regex
+    # Try to find and parse the JSON block the LLM should always return.
     json_match = _re.search(r"\{.*\}", raw, _re.DOTALL)
     if json_match:
         try:
             data = json.loads(json_match.group())
-            reply = data.get("response") or raw
+            reply = str(data.get("response") or "").strip()
             mood_score = max(1, min(10, int(data.get("mood_score", 5))))
             emotion = data.get("emotion", "neutral").lower().strip()
             valid_emotions = {"happy", "sad", "angry", "fearful", "disgusted", "surprised", "neutral"}
@@ -347,9 +374,32 @@ async def emotional_buddy_respond(user_text: str, history: list[dict] | None = N
         except (json.JSONDecodeError, ValueError):
             pass
 
-    # If reply still contains raw JSON junk, take only text before the first '{'
-    brace_pos = reply.find("{")
-    if brace_pos > 10:
-        reply = reply[:brace_pos].strip()
+    # Fallback: no JSON found — extract the conversational portion from raw text.
+    # The LLM may have returned plain text with metadata on separate lines.
+    if not reply:
+        # Take everything before the first line that looks like metadata.
+        lines = raw.splitlines()
+        conversation_lines = []
+        for line in lines:
+            if _METADATA_LINE_RE.search(line):
+                break  # stop at first metadata line
+            # Also stop if a line starts with '{' (JSON block)
+            if line.strip().startswith("{"):
+                break
+            conversation_lines.append(line)
+        reply = "\n".join(conversation_lines).strip()
+        if not reply:
+            # Last resort: strip all metadata lines from the whole raw string.
+            reply = _clean_buddy_reply(raw)
+
+    # Final guard: clean any metadata that may have been embedded inside the reply text.
+    reply = _clean_buddy_reply(reply)
+
+    # If still empty (pathological LLM failure), use a safe fallback.
+    if not reply:
+        fallback = {"English": "I'm here with you. How are you feeling right now?",
+                    "Hindi": "मैं यहाँ आपके साथ हूँ। आप अभी कैसा महसूस कर रहे हैं?",
+                    "Marathi": "मी इथे तुमच्यासाठी आहे. तुम्हाला सध्या कसं वाटतंय?"}
+        reply = fallback.get(preferred_lang, fallback["English"])
 
     return reply, mood_score, emotion

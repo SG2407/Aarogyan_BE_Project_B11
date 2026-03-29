@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../data/assistant_repository.dart';
 import '../../../profile/data/profile_repository.dart';
+
+const _sttLocaleMap = {
+  'English': 'en-US',
+  'Hindi': 'hi-IN',
+  'Marathi': 'mr-IN',
+};
 
 // Per-conversation chat state: list of message maps
 // Each message: {role, content, sources?}
@@ -166,6 +173,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             sending: _sending,
             onSend: _send,
             hintText: appStr(lang, 'assistant_hint'),
+            lang: lang,
           ),
         ],
       ),
@@ -370,17 +378,84 @@ class _SourcesButton extends StatelessWidget {
   }
 }
 
-class _InputBar extends StatelessWidget {
+class _InputBar extends StatefulWidget {
   final TextEditingController controller;
   final bool sending;
   final VoidCallback onSend;
   final String hintText;
+  final String lang;
   const _InputBar({
     required this.controller,
     required this.sending,
     required this.onSend,
     this.hintText = 'Ask a health question…',
+    this.lang = 'English',
   });
+
+  @override
+  State<_InputBar> createState() => _InputBarState();
+}
+
+class _InputBarState extends State<_InputBar> {
+  final _speech = stt.SpeechToText();
+  bool _speechAvailable = false;
+  bool _listening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  Future<void> _initSpeech() async {
+    final available = await _speech.initialize(
+      onError: (_) => _setListening(false),
+      onStatus: (status) {
+        if (status == 'done' || status == 'notListening') {
+          _setListening(false);
+        }
+      },
+    );
+    if (mounted) setState(() => _speechAvailable = available);
+  }
+
+  void _setListening(bool val) {
+    if (mounted) setState(() => _listening = val);
+  }
+
+  Future<void> _toggleListening() async {
+    if (_listening) {
+      await _speech.stop();
+      _setListening(false);
+      return;
+    }
+    if (!_speechAvailable) return;
+    final locale = _sttLocaleMap[widget.lang] ?? 'en-US';
+    _setListening(true);
+    await _speech.listen(
+      onResult: (result) {
+        if (result.recognizedWords.isNotEmpty) {
+          widget.controller.text = result.recognizedWords;
+          widget.controller.selection = TextSelection.fromPosition(
+            TextPosition(offset: widget.controller.text.length),
+          );
+        }
+      },
+      listenFor: const Duration(seconds: 60),
+      pauseFor: const Duration(seconds: 5),
+      localeId: locale,
+      listenOptions: stt.SpeechListenOptions(
+        partialResults: true,
+        cancelOnError: true,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _speech.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -389,14 +464,38 @@ class _InputBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
         color: Theme.of(context).colorScheme.surface,
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            // Mic button
+            Padding(
+              padding: const EdgeInsets.only(right: 8, bottom: 2),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _listening
+                      ? AppColors.error.withValues(alpha: 0.12)
+                      : AppColors.primary.withValues(alpha: 0.1),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    _listening ? Icons.stop_rounded : Icons.mic_rounded,
+                    color: _listening ? AppColors.error : AppColors.primary,
+                  ),
+                  onPressed: _speechAvailable ? _toggleListening : null,
+                  tooltip: appStr(widget.lang, _listening ? 'tap_interrupt' : 'start_conversation'),
+                ),
+              ),
+            ),
             Expanded(
               child: TextField(
-                controller: controller,
+                controller: widget.controller,
                 maxLines: null,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(
-                  hintText: hintText,
+                  hintText: _listening
+                      ? appStr(widget.lang, 'listening')
+                      : widget.hintText,
                   filled: true,
                   fillColor: Theme.of(context).scaffoldBackgroundColor,
                   contentPadding:
@@ -405,28 +504,52 @@ class _InputBar extends StatelessWidget {
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
                   ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: _listening
+                        ? BorderSide(
+                            color: AppColors.error.withValues(alpha: 0.5),
+                            width: 1.5,
+                          )
+                        : BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: _listening
+                        ? BorderSide(
+                            color: AppColors.error.withValues(alpha: 0.7),
+                            width: 1.5,
+                          )
+                        : const BorderSide(
+                            color: AppColors.primary,
+                            width: 1.5,
+                          ),
+                  ),
                 ),
-                onSubmitted: (_) => onSend(),
+                onSubmitted: (_) => widget.onSend(),
               ),
             ),
             const SizedBox(width: 8),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              child: CircleAvatar(
-                radius: 24,
-                backgroundColor: AppColors.primary,
-                child: sending
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : IconButton(
-                        icon:
-                            const Icon(Icons.send_rounded, color: Colors.white),
-                        onPressed: onSend,
-                      ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                child: CircleAvatar(
+                  radius: 24,
+                  backgroundColor: AppColors.primary,
+                  child: widget.sending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : IconButton(
+                          icon: const Icon(Icons.send_rounded,
+                              color: Colors.white),
+                          onPressed: widget.onSend,
+                        ),
+                ),
               ),
             ),
           ],
