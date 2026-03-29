@@ -79,7 +79,10 @@ entertainment, general trivia, etc. — respond ONLY with:
 • Do NOT use markdown headers (##), bold (**), or bullet-heavy formatting — write in clean prose
 • End complex answers with a gentle reminder to consult a qualified healthcare provider
 
-User medical profile context will be provided when available — use it to personalise responses."""
+User medical profile context will be provided when available — use it to personalise responses.
+
+━━━ LANGUAGE ━━━
+Detect the language of the user's message (English, Hindi, or Marathi) and respond in that exact same language. Use the user's preferred language as the fallback when the language is ambiguous."""
 
 _RAG_MEDICAL_SYSTEM = """\
 You are Aarogyan's Medical Health Assistant — a supportive, evidence-based AI health companion.
@@ -107,6 +110,9 @@ Use ONLY the provided context to answer. If the context is insufficient, say so 
 • Be DIRECT — answer immediately, no preamble
 • Write in clean prose — no markdown headers, no bold, no repeated ideas across paragraphs
 • End with a brief recommendation to consult a healthcare provider if the topic warrants it
+
+━━━ LANGUAGE ━━━
+Detect the language of the user's message (English, Hindi, or Marathi) and respond in that exact same language. Use the user's preferred language as the fallback when the language is ambiguous.
 
 --- Retrieved Medical Context ---
 {context}
@@ -174,7 +180,10 @@ IMPORTANT: Always respond in JSON format:
   "response": "your empathetic, warm reply here",
   "mood_score": <integer 1-10>,
   "emotion": "<one of: happy, sad, angry, fearful, disgusted, surprised, neutral>"
-}"""
+}
+
+━━━ LANGUAGE ━━━
+Detect the language of the user's message (English, Hindi, or Marathi) and write the "response" value in that exact same language. If the language is ambiguous, use the user's preferred language as the fallback. Always keep the JSON keys in English."""
 
 
 async def _call_groq(messages: list[dict], system: str, temperature: float = 0.7) -> str:
@@ -222,6 +231,7 @@ async def _chat_with_rag(
     history: list[dict],
     profile_context: str,
     is_complex: bool = False,
+    preferred_lang: str = "English",
 ) -> dict:
     """RAG-augmented chat: retrieve context then synthesise with Groq.
 
@@ -240,7 +250,7 @@ async def _chat_with_rag(
 
     if not context_str:
         logger.warning("RAG returned no context — falling back to plain LLM")
-        return await _chat_plain(user_message, history, profile_context)
+        return await _chat_plain(user_message, history, profile_context, preferred_lang=preferred_lang)
 
     profile_section = ""
     if profile_context:
@@ -250,6 +260,7 @@ async def _chat_with_rag(
         context=context_str,
         profile_section=profile_section,
     )
+    system += f"\n\nThe user's preferred language is {preferred_lang}."
 
     messages = [*history, {"role": "user", "content": user_message}]
     reply = await _call_groq(messages, system, temperature=0.2)
@@ -261,6 +272,7 @@ async def _chat_plain(
     user_message: str,
     history: list[dict],
     profile_context: str,
+    preferred_lang: str = "English",
 ) -> dict:
     """Plain LLM chat without RAG (fallback when Qdrant returns nothing).
     Returns {"reply": str, "sources": []}
@@ -268,6 +280,7 @@ async def _chat_plain(
     system = MEDICAL_ASSISTANT_SYSTEM
     if profile_context:
         system += f"\n\n--- User Health Profile ---\n{profile_context}"
+    system += f"\n\nThe user's preferred language is {preferred_lang}."
     messages = [*history, {"role": "user", "content": user_message}]
     reply = await _call_groq(messages, system)
     return {"reply": reply.strip(), "sources": []}
@@ -277,10 +290,11 @@ async def chat_with_ai(
     user_message: str,
     history: list[dict],
     profile_context: str,
+    preferred_lang: str = "English",
 ) -> dict:
     """Returns {"reply": str, "sources": list[str]}."""
     is_complex = await _route_query(user_message)
-    return await _chat_with_rag(user_message, history, profile_context, is_complex=is_complex)
+    return await _chat_with_rag(user_message, history, profile_context, is_complex=is_complex, preferred_lang=preferred_lang)
 
 
 async def summarise_document(ocr_text: str) -> dict:
@@ -308,11 +322,12 @@ async def summarise_document(ocr_text: str) -> dict:
 import re as _re
 
 
-async def emotional_buddy_respond(user_text: str, history: list[dict] | None = None) -> tuple[str, int, str]:
+async def emotional_buddy_respond(user_text: str, history: list[dict] | None = None, preferred_lang: str = "English") -> tuple[str, int, str]:
     """Returns (buddy_reply_text, mood_score, emotion)."""
+    system = EMOTIONAL_BUDDY_SYSTEM + f"\n\nThe user's preferred language is {preferred_lang}."
     messages = list(history or [])
     messages.append({"role": "user", "content": user_text})
-    raw = await _call_groq(messages, EMOTIONAL_BUDDY_SYSTEM)
+    raw = await _call_groq(messages, system, temperature=0.75)
 
     reply = raw
     mood_score = 5
