@@ -9,7 +9,9 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../data/buddy_repository.dart';
+import '../../../profile/data/profile_repository.dart';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 enum BuddyPhase { idle, listening, processing, playing }
@@ -62,12 +64,19 @@ class BuddyStateData {
 }
 
 // ─── Notifier ─────────────────────────────────────────────────────────────────
+const _sttLocale = {
+  'English': 'en-US',
+  'Hindi': 'hi-IN',
+  'Marathi': 'mr-IN',
+};
+
 class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
   final _speech = stt.SpeechToText();
   final _player = AudioPlayer();
 
   bool _speechInitialised = false;
   bool _disposed = false;
+  String _preferredLang = 'English';
 
   /// Partial transcript while speech-to-text is running
   String _partialTranscript = '';
@@ -86,7 +95,8 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
 
   /// Called when user taps "Start Conversation".
   /// Initialises on-device STT and immediately starts listening.
-  Future<void> startConversation() async {
+  Future<void> startConversation({String preferredLang = 'English'}) async {
+    _preferredLang = preferredLang;
     _set(state.copyWith(
       conversationActive: true,
       history: [],
@@ -151,6 +161,7 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
       onResult: _onResult,
       listenFor: const Duration(seconds: 60),
       pauseFor: const Duration(seconds: 2),
+      localeId: _sttLocale[_preferredLang] ?? 'en-US',
       onSoundLevelChange: (level) {
         // SpeechToText reports roughly –2..10 dB; normalise to 0..1
         final norm = ((level + 2) / 12).clamp(0.0, 1.0);
@@ -200,7 +211,11 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     try {
       final repo = ref.read(buddyRepositoryProvider);
       final historyMaps = state.history.map((t) => t.toMap()).toList();
-      final result = await repo.sendText(userText, historyMaps);
+      final result = await repo.sendText(
+        userText,
+        historyMaps,
+        preferredLanguage: _preferredLang,
+      );
 
       if (_disposed) return;
 
@@ -236,15 +251,24 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     } catch (e) {
       if (_disposed) return;
       String msg = 'Something went wrong — please try again.';
+      int retryDelay = 2;
+
       if (e is DioException) {
-        final detail = e.response?.data is Map
-            ? (e.response!.data as Map)['detail'] ?? e.message
-            : e.message;
-        msg = 'Error ${e.response?.statusCode}: $detail';
+        final statusCode = e.response?.statusCode;
+        // 404 / 502 / 503 → HF Space cold-start or sleeping; retry after longer pause
+        if (statusCode == 404 || statusCode == 502 || statusCode == 503) {
+          msg = appStr(_preferredLang, 'service_starting');
+          retryDelay = 10;
+        } else {
+          final detail = e.response?.data is Map
+              ? (e.response!.data as Map)['detail'] ?? e.message
+              : e.message;
+          msg = 'Error $statusCode: $detail';
+        }
       }
+
       _set(state.copyWith(phase: BuddyPhase.idle, error: msg));
-      // Auto-recover to listening after a brief pause
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed(Duration(seconds: retryDelay));
       if (!_disposed && state.conversationActive) {
         await _startListening();
       }
@@ -278,15 +302,17 @@ class BuddyScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(buddyNotifierProvider);
     final notifier = ref.read(buddyNotifierProvider.notifier);
+    final profileAsync = ref.watch(profileProvider);
+    final preferredLang = profileAsync.valueOrNull?['preferred_language'] as String? ?? 'English';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Orbz — Emotional Buddy'),
+        title: Text(appStr(preferredLang, 'buddy_title')),
         actions: [
           if (s.conversationActive)
             TextButton(
               onPressed: notifier.endConversation,
-              child: const Text('End'),
+              child: Text(appStr(preferredLang, 'end')),
             ),
         ],
       ),
@@ -309,6 +335,7 @@ class BuddyScreen extends ConsumerWidget {
                 conversationActive: s.conversationActive,
                 lastUserText: s.lastUserText,
                 lastReply: s.lastReply,
+                lang: preferredLang,
               ),
               const SizedBox(height: 20),
               if (s.error != null)
@@ -327,8 +354,9 @@ class BuddyScreen extends ConsumerWidget {
               _BottomControls(
                 phase: s.phase,
                 conversationActive: s.conversationActive,
-                onStart: notifier.startConversation,
+                onStart: () => notifier.startConversation(preferredLang: preferredLang),
                 onInterrupt: notifier.interrupt,
+                lang: preferredLang,
               ),
               const SizedBox(height: 24),
             ],
@@ -642,34 +670,36 @@ class _PhaseLabel extends StatelessWidget {
   final bool conversationActive;
   final String? lastUserText;
   final String? lastReply;
+  final String lang;
 
   const _PhaseLabel({
     required this.phase,
     required this.conversationActive,
+    required this.lang,
     this.lastUserText,
     this.lastReply,
   });
 
   String _headline() {
-    if (!conversationActive) return 'Tap below to begin';
+    if (!conversationActive) return appStr(lang, 'tap_to_begin');
     switch (phase) {
       case BuddyPhase.idle:
-        return 'Starting…';
+        return appStr(lang, 'starting');
       case BuddyPhase.listening:
-        return 'Listening…';
+        return appStr(lang, 'listening');
       case BuddyPhase.processing:
-        return 'Orbz is thinking…';
+        return appStr(lang, 'thinking');
       case BuddyPhase.playing:
-        return 'Orbz is speaking…';
+        return appStr(lang, 'speaking');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final caption = phase == BuddyPhase.listening
-        ? 'Speak freely — Orbz will respond when you pause'
+        ? appStr(lang, 'speak_freely')
         : phase == BuddyPhase.playing
-            ? 'Tap the mic icon below to interrupt'
+            ? appStr(lang, 'tap_to_interrupt_caption')
             : null;
 
     return Column(
@@ -777,12 +807,14 @@ class _BottomControls extends StatelessWidget {
   final bool conversationActive;
   final VoidCallback onStart;
   final VoidCallback onInterrupt;
+  final String lang;
 
   const _BottomControls({
     required this.phase,
     required this.conversationActive,
     required this.onStart,
     required this.onInterrupt,
+    required this.lang,
   });
 
   @override
@@ -795,7 +827,7 @@ class _BottomControls extends StatelessWidget {
           ElevatedButton.icon(
             onPressed: onStart,
             icon: const Icon(Icons.favorite_rounded),
-            label: const Text('Start Conversation'),
+            label: Text(appStr(lang, 'start_conversation')),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -809,7 +841,7 @@ class _BottomControls extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'One tap — then just speak naturally',
+            appStr(lang, 'one_tap_hint'),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context)
                       .colorScheme
@@ -829,7 +861,7 @@ class _BottomControls extends StatelessWidget {
           const _SoundWaveIndicator(),
           const SizedBox(height: 8),
           Text(
-            'Pause speaking for 2 s to send',
+            appStr(lang, 'pause_hint'),
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: Theme.of(context)
                       .colorScheme
@@ -861,7 +893,7 @@ class _BottomControls extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Tap to interrupt',
+            appStr(lang, 'tap_interrupt'),
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: Theme.of(context)
                       .colorScheme

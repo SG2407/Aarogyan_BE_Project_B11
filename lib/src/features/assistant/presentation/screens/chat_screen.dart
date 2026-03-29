@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../data/assistant_repository.dart';
+import '../../../profile/data/profile_repository.dart';
 
 // Per-conversation chat state: list of message maps
 // Each message: {role, content, sources?}
@@ -16,6 +18,12 @@ class ChatNotifier
 
   Future<void> sendMessage(String text) async {
     final conversationId = arg;
+    // Read preferred language from profile (fire-and-forget, default to English)
+    String preferredLanguage = 'English';
+    try {
+      final profile = await ref.read(profileProvider.future);
+      preferredLanguage = profile['preferred_language'] as String? ?? 'English';
+    } catch (_) {}
     final current = state.valueOrNull ?? [];
     state = AsyncData([
       ...current,
@@ -25,6 +33,7 @@ class ChatNotifier
       final resp = await ref.read(assistantRepositoryProvider).sendMessage(
             conversationId: conversationId,
             message: text,
+            preferredLanguage: preferredLanguage,
           );
       final sources = (resp['sources'] as List<dynamic>?)
               ?.map((e) => e.toString())
@@ -112,9 +121,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final messagesAsync =
         ref.watch(chatNotifierProvider(widget.conversationId));
+    final profileAsync = ref.watch(profileProvider);
+    final lang = profileAsync.valueOrNull?['preferred_language'] as String? ?? 'English';
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Health Assistant'),
+        title: Text(appStr(lang, 'assistant_title')),
         elevation: 0,
       ),
       body: Column(
@@ -125,7 +136,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (messages) {
                 if (messages.isEmpty) {
-                  return const _WelcomeBanner();
+                  return _WelcomeBanner(lang: lang);
                 }
                 WidgetsBinding.instance
                     .addPostFrameCallback((_) => _scrollToBottom());
@@ -154,6 +165,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             controller: _msgCtrl,
             sending: _sending,
             onSend: _send,
+            hintText: appStr(lang, 'assistant_hint'),
           ),
         ],
       ),
@@ -162,7 +174,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 }
 
 class _WelcomeBanner extends StatelessWidget {
-  const _WelcomeBanner();
+  final String lang;
+  const _WelcomeBanner({this.lang = 'English'});
 
   @override
   Widget build(BuildContext context) {
@@ -175,12 +188,12 @@ class _WelcomeBanner extends StatelessWidget {
             const Icon(Icons.health_and_safety_rounded,
                 size: 56, color: AppColors.primary),
             const SizedBox(height: 16),
-            Text('Ask me anything about your health',
+            Text(appStr(lang, 'welcome_title'),
                 style: Theme.of(context).textTheme.headlineSmall,
                 textAlign: TextAlign.center),
             const SizedBox(height: 8),
             Text(
-              'I\'ll use your health profile to give you personalised, accurate information.',
+              appStr(lang, 'welcome_subtitle'),
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -361,10 +374,12 @@ class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final bool sending;
   final VoidCallback onSend;
+  final String hintText;
   const _InputBar({
     required this.controller,
     required this.sending,
     required this.onSend,
+    this.hintText = 'Ask a health question…',
   });
 
   @override
@@ -381,7 +396,7 @@ class _InputBar extends StatelessWidget {
                 maxLines: null,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(
-                  hintText: 'Ask a health question…',
+                  hintText: hintText,
                   filled: true,
                   fillColor: Theme.of(context).scaffoldBackgroundColor,
                   contentPadding:
