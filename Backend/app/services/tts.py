@@ -30,12 +30,12 @@ def _split_text(text: str, limit: int = _MAX_CHARS) -> list[str]:
     return chunks or [text[:limit]]
 
 
-async def _fetch_chunk(client: httpx.AsyncClient, chunk: str) -> bytes:
+async def _fetch_chunk(client: httpx.AsyncClient, chunk: str, lang: str = "en") -> bytes:
     url = "https://translate.google.com/translate_tts"
     params = {
         "ie": "UTF-8",
         "q": chunk,
-        "tl": "en",
+        "tl": lang,
         "client": "tw-ob",
         "total": "1",
         "idx": "0",
@@ -47,7 +47,7 @@ async def _fetch_chunk(client: httpx.AsyncClient, chunk: str) -> bytes:
     return resp.content
 
 
-async def text_to_speech_bytes(text: str) -> bytes:
+async def text_to_speech_bytes(text: str, lang: str = "en") -> bytes:
     """Convert text to speech using Google Translate TTS. Returns MP3 bytes.
     Splits long text into chunks and concatenates the audio.
     Raises on failure after 20 seconds total.
@@ -55,7 +55,7 @@ async def text_to_speech_bytes(text: str) -> bytes:
     chunks = _split_text(text)
     async with httpx.AsyncClient(timeout=15) as client:
         parts = await asyncio.wait_for(
-            asyncio.gather(*[_fetch_chunk(client, c) for c in chunks]),
+            asyncio.gather(*[_fetch_chunk(client, c, lang) for c in chunks]),
             timeout=20,
         )
     return b"".join(parts)

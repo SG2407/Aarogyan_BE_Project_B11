@@ -1,29 +1,41 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/l10n/app_strings.dart';
+import '../profile/data/profile_repository.dart';
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   final Widget child;
   const MainShell({super.key, required this.child});
 
-  static const _tabs = [
-    ('/home', Icons.home_rounded, 'Home'),
-    ('/consultations', Icons.folder_special_rounded, 'Tracker'),
-    ('/assistant', Icons.chat_bubble_rounded, 'Assistant'),
-    ('/buddy', Icons.favorite_rounded, 'Buddy'),
-    ('/profile', Icons.person_rounded, 'Profile'),
+  static const _routes = [
+    ('/home', Icons.home_rounded),
+    ('/consultations', Icons.folder_special_rounded),
+    ('/assistant', Icons.chat_bubble_rounded),
+    ('/buddy', Icons.favorite_rounded),
+    ('/profile', Icons.person_rounded),
+  ];
+
+  static const _labelKeys = [
+    'nav_home',
+    'nav_tracker',
+    'nav_assistant',
+    'nav_buddy',
+    'nav_profile',
   ];
 
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    for (int i = 0; i < _tabs.length; i++) {
-      if (location.startsWith(_tabs[i].$1)) return i;
+    for (int i = 0; i < _routes.length; i++) {
+      if (location.startsWith(_routes[i].$1)) return i;
     }
     return 0;
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lang = ref.watch(preferredLanguageProvider);
     final idx = _currentIndex(context);
     return Scaffold(
       body: child,
@@ -43,12 +55,13 @@ class MainShell extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(_tabs.length, (i) {
-                final tab = _tabs[i];
+              children: List.generate(_routes.length, (i) {
+                final route = _routes[i];
+                final label = appStr(lang, _labelKeys[i]);
                 final selected = i == idx;
                 return Expanded(
                   child: GestureDetector(
-                    onTap: () => context.go(tab.$1),
+                    onTap: () => context.go(route.$1),
                     behavior: HitTestBehavior.opaque,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
@@ -64,7 +77,7 @@ class MainShell extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            tab.$2,
+                            route.$2,
                             color: selected
                                 ? AppColors.primary
                               : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
@@ -72,7 +85,7 @@ class MainShell extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            tab.$3,
+                            label,
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight:

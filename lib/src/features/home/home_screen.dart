@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../profile/data/profile_repository.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final lang = ref.watch(preferredLanguageProvider);
     return Scaffold(
       body: SafeArea(
         child: CustomScrollView(
@@ -16,11 +19,11 @@ class HomeScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(24),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  _buildHeader(context),
+                  _buildHeader(context, lang),
                   const SizedBox(height: 32),
-                  _buildQuickActions(context),
+                  _buildQuickActions(context, lang),
                   const SizedBox(height: 24),
-                  _buildFeatureCards(context),
+                  _buildFeatureCards(context, lang),
                 ]),
               ),
             ),
@@ -30,12 +33,12 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, String lang) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Welcome to',
+          appStr(lang, 'home_welcome'),
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
               ),
@@ -46,20 +49,20 @@ class HomeScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Your personalised health companion',
+          appStr(lang, 'home_tagline'),
           style: Theme.of(context).textTheme.bodyMedium,
         ),
       ],
     );
   }
 
-  Widget _buildQuickActions(BuildContext context) {
+  Widget _buildQuickActions(BuildContext context, String lang) {
     return Row(
       children: [
         Expanded(
           child: _QuickActionCard(
             icon: Icons.chat_bubble_rounded,
-            label: 'Ask Health\nQuestion',
+            label: appStr(lang, 'home_ask'),
             color: AppColors.primary,
             onTap: () => context.go('/assistant'),
           ),
@@ -68,7 +71,7 @@ class HomeScreen extends ConsumerWidget {
         Expanded(
           child: _QuickActionCard(
             icon: Icons.document_scanner_rounded,
-            label: 'Scan\nDocument',
+            label: appStr(lang, 'home_scan'),
             color: AppColors.accent,
             onTap: () => context.go('/documents'),
           ),
@@ -77,26 +80,26 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildFeatureCards(BuildContext context) {
+  Widget _buildFeatureCards(BuildContext context, String lang) {
     final features = [
       _FeatureData(
         icon: Icons.folder_special_rounded,
-        title: 'Consultation Tracker',
-        subtitle: 'Track your treatment history & sessions',
+        title: appStr(lang, 'feat_consultation'),
+        subtitle: appStr(lang, 'feat_consultation_sub'),
         color: const Color(0xFF2E7D66),
         route: '/consultations',
       ),
       _FeatureData(
         icon: Icons.document_scanner_rounded,
-        title: 'Document Summarisation',
-        subtitle: 'AI-powered prescription & report analysis',
+        title: appStr(lang, 'feat_documents'),
+        subtitle: appStr(lang, 'feat_documents_sub'),
         color: AppColors.accent,
         route: '/documents',
       ),
       _FeatureData(
         icon: Icons.bar_chart_rounded,
-        title: 'Mental Health Tracker',
-        subtitle: 'Your emotional well-being trends',
+        title: appStr(lang, 'feat_mental'),
+        subtitle: appStr(lang, 'feat_mental_sub'),
         color: const Color(0xFF7C5CBF),
         route: '/mental-health',
       ),
@@ -106,7 +109,7 @@ class HomeScreen extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Features',
+          appStr(lang, 'home_features'),
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 16),

@@ -28,3 +28,10 @@ final profileRepositoryProvider = Provider<ProfileRepository>(
 final profileProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   return ref.read(profileRepositoryProvider).getProfile();
 });
+
+/// Lightweight derived provider — returns just the preferred language string.
+/// All screens should watch this instead of reading profileProvider directly.
+final preferredLanguageProvider = Provider<String>((ref) {
+  final profileAsync = ref.watch(profileProvider);
+  return profileAsync.valueOrNull?['preferred_language'] as String? ?? 'English';
+});

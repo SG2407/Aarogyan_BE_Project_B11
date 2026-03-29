@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../features/profile/data/profile_repository.dart';
 import '../../data/assistant_repository.dart';
 
 class AssistantScreen extends ConsumerWidget {
@@ -10,9 +12,10 @@ class AssistantScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final conversations = ref.watch(conversationsListProvider);
+    final lang = ref.watch(preferredLanguageProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Health Assistant')),
+      appBar: AppBar(title: Text(appStr(lang, 'assistant_title'))),
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.primary,
         onPressed: () => _startNewChat(context, ref),
@@ -23,7 +26,7 @@ class AssistantScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (list) {
           if (list.isEmpty) {
-            return _EmptyState(onNew: () => _startNewChat(context, ref));
+            return _EmptyState(lang: lang, onNew: () => _startNewChat(context, ref));
           }
           return ListView.separated(
             padding: const EdgeInsets.all(20),
@@ -33,6 +36,7 @@ class AssistantScreen extends ConsumerWidget {
               final conv = list[i] as Map<String, dynamic>;
               return _ConversationTile(
                 conversation: conv,
+                lang: lang,
                 onTap: () => context.go('/assistant/${conv['id']}'),
                 onDelete: () async {
                   await ref
@@ -60,11 +64,13 @@ class AssistantScreen extends ConsumerWidget {
 
 class _ConversationTile extends StatelessWidget {
   final Map<String, dynamic> conversation;
+  final String lang;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _ConversationTile({
     required this.conversation,
+    required this.lang,
     required this.onTap,
     required this.onDelete,
   });
@@ -138,18 +144,18 @@ class _ConversationTile extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete chat?'),
-        content: const Text('This conversation will be permanently deleted.'),
+        title: Text(appStr(lang, 'delete_chat_title')),
+        content: Text(appStr(lang, 'delete_chat_content')),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: Text(appStr(lang, 'cancel'))),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               onDelete();
             },
             child:
-                const Text('Delete', style: TextStyle(color: AppColors.error)),
+                Text(appStr(lang, 'delete'), style: const TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -158,8 +164,9 @@ class _ConversationTile extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
+  final String lang;
   final VoidCallback onNew;
-  const _EmptyState({required this.onNew});
+  const _EmptyState({required this.lang, required this.onNew});
 
   @override
   Widget build(BuildContext context) {
@@ -172,11 +179,11 @@ class _EmptyState extends StatelessWidget {
             const Icon(Icons.health_and_safety_rounded,
                 size: 72, color: AppColors.primary),
             const SizedBox(height: 20),
-            Text('Your Health Assistant',
+            Text(appStr(lang, 'your_health_assistant'),
                 style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
-              'Ask questions about your health, understand your test reports, or get guidance on symptoms.',
+              appStr(lang, 'assistant_desc'),
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -184,7 +191,7 @@ class _EmptyState extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: onNew,
               icon: const Icon(Icons.add_comment_rounded),
-              label: const Text('Start a Conversation'),
+              label: Text(appStr(lang, 'start_conversation')),
             ),
           ],
         ),

@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../features/profile/data/profile_repository.dart';
 import '../../data/document_repository.dart';
 
 class DocumentResult {
@@ -36,16 +38,19 @@ class DocumentScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final result = ref.watch(_documentResultProvider);
     final loading = ref.watch(_loadingProvider);
+    final lang = ref.watch(preferredLanguageProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Document Scanner')),
+      appBar: AppBar(title: Text(appStr(lang, 'document_scanner'))),
       body: result == null
           ? _UploadPrompt(
+              lang: lang,
               loading: loading,
               onPickFile: () => _pickFile(context, ref),
               onCamera: () => _takePhoto(context, ref),
             )
           : _ResultView(
+              lang: lang,
               result: result,
               onScanAnother: () =>
                   ref.read(_documentResultProvider.notifier).state = null,
@@ -141,11 +146,13 @@ class DocumentScreen extends ConsumerWidget {
 // ─── Upload prompt ────────────────────────────────────────────────────────────
 
 class _UploadPrompt extends StatelessWidget {
+  final String lang;
   final bool loading;
   final VoidCallback onPickFile;
   final VoidCallback onCamera;
 
   const _UploadPrompt({
+    required this.lang,
     required this.loading,
     required this.onPickFile,
     required this.onCamera,
@@ -170,11 +177,11 @@ class _UploadPrompt extends StatelessWidget {
                   size: 48, color: AppColors.primary),
             ),
             const SizedBox(height: 24),
-            Text('Scan a Document',
+            Text(appStr(lang, 'scan_a_document'),
                 style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 12),
             Text(
-              'Upload a prescription, test report, discharge summary, or any health document. Our AI will explain what it means in simple words.',
+              appStr(lang, 'scan_desc'),
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -203,7 +210,7 @@ class _UploadPrompt extends StatelessWidget {
                         foregroundColor: AppColors.primary,
                       ),
                       icon: const Icon(Icons.camera_alt_rounded),
-                      label: const Text('Camera'),
+                      label: Text(appStr(lang, 'camera')),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -214,7 +221,7 @@ class _UploadPrompt extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Choose File'),
+                      label: Text(appStr(lang, 'choose_file')),
                     ),
                   ),
                 ],
@@ -238,10 +245,11 @@ class _UploadPrompt extends StatelessWidget {
 // ─── Result view ──────────────────────────────────────────────────────────────
 
 class _ResultView extends StatelessWidget {
+  final String lang;
   final DocumentResult result;
   final VoidCallback onScanAnother;
 
-  const _ResultView({required this.result, required this.onScanAnother});
+  const _ResultView({required this.lang, required this.result, required this.onScanAnother});
 
   @override
   Widget build(BuildContext context) {
@@ -285,7 +293,7 @@ class _ResultView extends StatelessWidget {
         _Card(
           icon: Icons.auto_awesome_rounded,
           iconColor: AppColors.primary,
-          title: 'AI Explanation',
+          title: appStr(lang, 'ai_explanation'),
           child: Text(
             result.explanation,
             style: Theme.of(context).textTheme.bodyLarge,
@@ -298,7 +306,7 @@ class _ResultView extends StatelessWidget {
           _Card(
             icon: Icons.fact_check_rounded,
             iconColor: Colors.teal,
-            title: 'Key Findings',
+            title: appStr(lang, 'key_findings'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: result.keyFindings
@@ -328,7 +336,7 @@ class _ResultView extends StatelessWidget {
         _Card(
           icon: Icons.analytics_rounded,
           iconColor: _confidenceColor(result.confidenceScore),
-          title: 'Analysis Confidence',
+          title: appStr(lang, 'analysis_confidence'),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -404,7 +412,7 @@ class _ResultView extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: onScanAnother,
           icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Scan Another Document'),
+          label: Text(appStr(lang, 'scan_another')),
         ),
         const SizedBox(height: 20),
       ],

@@ -149,7 +149,7 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
   }
 
   /// Start on-device speech recognition.
-  /// `pauseFor` acts as the on-device VAD — auto-finalises after 2 s of silence.
+  /// `pauseFor` acts as the on-device VAD — auto-finalises after 5 s of silence.
   Future<void> _startListening() async {
     if (_disposed || !state.conversationActive) return;
     if (!_speechInitialised) return;
@@ -160,7 +160,7 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     await _speech.listen(
       onResult: _onResult,
       listenFor: const Duration(seconds: 60),
-      pauseFor: const Duration(seconds: 2),
+      pauseFor: const Duration(seconds: 5),
       localeId: _sttLocale[_preferredLang] ?? 'en-US',
       onSoundLevelChange: (level) {
         // SpeechToText reports roughly –2..10 dB; normalise to 0..1

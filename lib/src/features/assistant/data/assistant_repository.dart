@@ -27,10 +27,12 @@ class AssistantRepository {
   Future<Map<String, dynamic>> sendMessage({
     required String? conversationId,
     required String message,
+    String preferredLanguage = 'English',
   }) async {
     final resp = await _dio.post('/assistant/chat', data: {
       if (conversationId != null) 'conversation_id': conversationId,
       'message': message,
+      'preferred_language': preferredLanguage,
     });
     return resp.data as Map<String, dynamic>;
   }

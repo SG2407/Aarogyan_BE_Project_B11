@@ -13,13 +13,15 @@ class BuddyRepository {
   /// server-side STT are eliminated entirely.
   Future<Map<String, dynamic>> sendText(
     String text,
-    List<Map<String, String>> history,
-  ) async {
+    List<Map<String, String>> history, {
+    String preferredLanguage = 'English',
+  }) async {
     final resp = await _dio.post(
       '/buddy/chat',
       data: {
         'text': text,
         'history': history,
+        'preferred_language': preferredLanguage,
       },
       options: Options(
         receiveTimeout: const Duration(minutes: 3),

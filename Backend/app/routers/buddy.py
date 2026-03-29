@@ -15,6 +15,10 @@ router = APIRouter(prefix="/buddy", tags=["emotional-buddy"])
 class BuddyTextRequest(BaseModel):
     text: str
     history: Optional[List[dict]] = None
+    preferred_language: str = "English"
+
+
+_LANG_CODE: dict[str, str] = {"English": "en", "Hindi": "hi", "Marathi": "mr"}
 
 
 @router.post("/chat")
@@ -30,14 +34,15 @@ async def text_chat(
         raise HTTPException(status_code=422, detail="Text must not be empty")
 
     history = body.history or []
+    lang_code = _LANG_CODE.get(body.preferred_language, "en")
 
     # AI response
-    ai_text, mood_score, emotion = await emotional_buddy_respond(body.text, history)
+    ai_text, mood_score, emotion = await emotional_buddy_respond(body.text, history, body.preferred_language)
 
     # TTS — non-critical: failure returns empty audio, client can still show text
     audio_response = b""
     try:
-        audio_response = await text_to_speech_bytes(ai_text)
+        audio_response = await text_to_speech_bytes(ai_text, lang_code)
     except Exception as tts_err:
         import logging
         logging.getLogger(__name__).warning("TTS failed: %s", tts_err)

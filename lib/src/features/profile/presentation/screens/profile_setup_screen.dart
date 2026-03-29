@@ -19,12 +19,17 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   bool _saving = false;
 
   // Section 1 controllers
+  final _fullNameCtrl = TextEditingController();
   final _dobCtrl = TextEditingController();
   String? _sex;
   final _heightCtrl = TextEditingController();
   final _weightCtrl = TextEditingController();
   String? _bloodGroup;
   final _cityCtrl = TextEditingController();
+  final _regionCtrl = TextEditingController();
+  String? _preferredLanguage;
+  final _emergencyNameCtrl = TextEditingController();
+  final _emergencyPhoneCtrl = TextEditingController();
 
   final List<String> _sexOptions = ['Male', 'Female', 'Intersex'];
   final List<String> _bloodGroups = [
@@ -38,13 +43,22 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     'O−',
     'Unknown'
   ];
+  final List<String> _languageOpts = [
+    'English',
+    'Hindi',
+    'Marathi',
+  ];
 
   @override
   void dispose() {
+    _fullNameCtrl.dispose();
     _dobCtrl.dispose();
     _heightCtrl.dispose();
     _weightCtrl.dispose();
     _cityCtrl.dispose();
+    _regionCtrl.dispose();
+    _emergencyNameCtrl.dispose();
+    _emergencyPhoneCtrl.dispose();
     super.dispose();
   }
 
@@ -54,6 +68,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
     try {
       final data = <String, dynamic>{};
+      if (_fullNameCtrl.text.isNotEmpty) data['full_name'] = _fullNameCtrl.text.trim();
       if (_dobCtrl.text.isNotEmpty) data['date_of_birth'] = _dobCtrl.text;
       if (_sex != null) data['biological_sex'] = _sex;
       if (_heightCtrl.text.isNotEmpty)
@@ -62,6 +77,12 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         data['weight_kg'] = double.tryParse(_weightCtrl.text);
       if (_bloodGroup != null) data['blood_group'] = _bloodGroup;
       if (_cityCtrl.text.isNotEmpty) data['city'] = _cityCtrl.text.trim();
+      if (_regionCtrl.text.isNotEmpty) data['region_state'] = _regionCtrl.text.trim();
+      if (_preferredLanguage != null) data['preferred_language'] = _preferredLanguage;
+      if (_emergencyNameCtrl.text.isNotEmpty)
+        data['emergency_contact_name'] = _emergencyNameCtrl.text.trim();
+      if (_emergencyPhoneCtrl.text.isNotEmpty)
+        data['emergency_contact_phone'] = _emergencyPhoneCtrl.text.trim();
 
       await ref.read(profileRepositoryProvider).upsertProfile(data);
       if (mounted) context.go('/home');
@@ -107,6 +128,12 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                       'This helps personalise your health recommendations',
                 ),
                 const SizedBox(height: 24),
+                AppTextField(
+                  controller: _fullNameCtrl,
+                  label: 'Full Name',
+                  hint: 'Your full name',
+                ),
+                const SizedBox(height: 16),
                 _buildDateField(),
                 const SizedBox(height: 16),
                 _buildDropdown('Biological Sex', _sexOptions, _sex,
@@ -141,6 +168,37 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                   controller: _cityCtrl,
                   label: 'City (optional)',
                   hint: 'Your city',
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _regionCtrl,
+                  label: 'State / Region (optional)',
+                  hint: 'e.g. Maharashtra',
+                ),
+                const SizedBox(height: 16),
+                _buildDropdown(
+                  'Preferred Language',
+                  _languageOpts,
+                  _preferredLanguage,
+                  (v) => setState(() => _preferredLanguage = v),
+                ),
+                const SizedBox(height: 32),
+                const SectionHeader(
+                  title: 'Emergency Contact',
+                  subtitle: 'Who should be contacted in a medical emergency?',
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _emergencyNameCtrl,
+                  label: 'Contact Name (optional)',
+                  hint: 'e.g. Jane Doe',
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _emergencyPhoneCtrl,
+                  label: 'Contact Phone (optional)',
+                  keyboard: TextInputType.phone,
+                  hint: 'e.g. +91 98765 43210',
                 ),
                 const SizedBox(height: 40),
                 AppButton(

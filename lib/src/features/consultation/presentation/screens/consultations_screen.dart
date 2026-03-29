@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../features/profile/data/profile_repository.dart';
 import '../../data/consultation_repository.dart';
 
 class ConsultationsScreen extends ConsumerWidget {
@@ -11,21 +13,22 @@ class ConsultationsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final consultationsAsync = ref.watch(consultationsListProvider);
+    final lang = ref.watch(preferredLanguageProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Consultations')),
+      appBar: AppBar(title: Text(appStr(lang, 'consultations_title'))),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCreateDialog(context, ref),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('New', style: TextStyle(color: Colors.white)),
+        label: Text(appStr(lang, 'new_label'), style: const TextStyle(color: Colors.white)),
       ),
       body: consultationsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (list) {
           if (list.isEmpty) {
-            return _EmptyState(onAdd: () => _showCreateDialog(context, ref));
+            return _EmptyState(lang: lang, onAdd: () => _showCreateDialog(context, ref));
           }
           return ListView.builder(
             padding: const EdgeInsets.all(20),
@@ -34,6 +37,7 @@ class ConsultationsScreen extends ConsumerWidget {
               final c = list[i] as Map<String, dynamic>;
               return _ConsultationCard(
                 consultation: c,
+                lang: lang,
                 onTap: () => context.go('/consultations/${c['id']}'),
                 onDelete: () async {
                   await ref
@@ -52,6 +56,7 @@ class ConsultationsScreen extends ConsumerWidget {
   void _showCreateDialog(BuildContext context, WidgetRef ref) {
     final nameCtrl = TextEditingController();
     String? startDate;
+    final lang = ref.read(preferredLanguageProvider);
 
     showModalBottomSheet(
       context: context,
@@ -73,14 +78,14 @@ class ConsultationsScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('New Consultation',
+              Text(appStr(lang, 'new_consultation'),
                   style: Theme.of(ctx).textTheme.headlineSmall),
               const SizedBox(height: 20),
               TextFormField(
                 controller: nameCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Consultation Name',
+                decoration: InputDecoration(
+                  labelText: appStr(lang, 'consult_name_label'),
                   hintText: 'e.g. Skin Allergy Treatment',
                 ),
               ),
@@ -118,7 +123,7 @@ class ConsultationsScreen extends ConsumerWidget {
                           color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
                       const SizedBox(width: 12),
                       Text(
-                        startDate ?? 'Start Date (optional)',
+                        startDate ?? appStr(lang, 'consult_start_date'),
                         style: TextStyle(
                           color: startDate != null
                               ? Theme.of(ctx).colorScheme.onSurface
@@ -142,7 +147,7 @@ class ConsultationsScreen extends ConsumerWidget {
                   ref.invalidate(consultationsListProvider);
                   if (ctx.mounted) Navigator.pop(ctx);
                 },
-                child: const Text('Create Consultation'),
+                child: Text(appStr(lang, 'create_consultation')),
               ),
             ],
           ),
@@ -154,11 +159,13 @@ class ConsultationsScreen extends ConsumerWidget {
 
 class _ConsultationCard extends StatelessWidget {
   final Map<String, dynamic> consultation;
+  final String lang;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _ConsultationCard({
     required this.consultation,
+    required this.lang,
     required this.onTap,
     required this.onDelete,
   });
@@ -216,18 +223,18 @@ class _ConsultationCard extends StatelessWidget {
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('Delete Consultation'),
+                        title: Text(appStr(lang, 'delete_consultation')),
                         content: Text(
-                          'Delete "${consultation['name']}"? All sessions and documents will be permanently removed.',
+                          "Delete \"${consultation['name']}\"? All sessions and documents will be permanently removed.",
                         ),
                         actions: [
                           TextButton(
                               onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text('Cancel')),
+                              child: Text(appStr(lang, 'cancel'))),
                           TextButton(
                               onPressed: () => Navigator.pop(ctx, true),
-                              child: const Text('Delete',
-                                  style: TextStyle(color: AppColors.error))),
+                              child: Text(appStr(lang, 'delete'),
+                                  style: const TextStyle(color: AppColors.error))),
                         ],
                       ),
                     );
@@ -246,8 +253,9 @@ class _ConsultationCard extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
+  final String lang;
   final VoidCallback onAdd;
-  const _EmptyState({required this.onAdd});
+  const _EmptyState({required this.lang, required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -268,11 +276,11 @@ class _EmptyState extends StatelessWidget {
                   color: AppColors.primary, size: 40),
             ),
             const SizedBox(height: 24),
-            Text('No consultations yet',
+            Text(appStr(lang, 'no_consultations'),
                 style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
-              'Create your first consultation to start tracking your treatment journey.',
+              appStr(lang, 'no_consultations_sub'),
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -280,7 +288,7 @@ class _EmptyState extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: onAdd,
               icon: const Icon(Icons.add),
-              label: const Text('Create Consultation'),
+              label: Text(appStr(lang, 'create_consultation')),
             ),
           ],
         ),

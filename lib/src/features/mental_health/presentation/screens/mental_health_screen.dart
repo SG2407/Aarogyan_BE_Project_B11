@@ -2,7 +2,9 @@ import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../features/profile/data/profile_repository.dart';
 import '../../data/mental_health_repository.dart';
 
 // ─── Emotion meta ─────────────────────────────────────────────────────────────
@@ -31,10 +33,11 @@ class MentalHealthScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dashboardAsync = ref.watch(mentalHealthDashboardProvider);
     final filter = ref.watch(dashboardFilterProvider);
+    final lang = ref.watch(preferredLanguageProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mental Health'),
+        title: Text(appStr(lang, 'mental_title')),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
@@ -45,8 +48,9 @@ class MentalHealthScreen extends ConsumerWidget {
       body: dashboardAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _ErrorState(
+            lang: lang,
             onRetry: () => ref.invalidate(mentalHealthDashboardProvider)),
-        data: (data) => _Dashboard(data: data, filter: filter),
+        data: (data) => _Dashboard(data: data, filter: filter, lang: lang),
       ),
     );
   }
@@ -56,7 +60,8 @@ class MentalHealthScreen extends ConsumerWidget {
 class _Dashboard extends ConsumerWidget {
   final Map<String, dynamic> data;
   final int filter;
-  const _Dashboard({required this.data, required this.filter});
+  final String lang;
+  const _Dashboard({required this.data, required this.filter, required this.lang});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -79,7 +84,7 @@ class _Dashboard extends ConsumerWidget {
 
         // ── Hero: Latest Emotion Card (#9) ─────────────────────────────────
         if (latestSession != null) ...[
-          _LatestEmotionCard(session: latestSession),
+          _LatestEmotionCard(session: latestSession, lang: lang),
           const SizedBox(height: 20),
         ],
 
@@ -107,28 +112,28 @@ class _Dashboard extends ConsumerWidget {
         const SizedBox(height: 24),
 
         if (total == 0) ...[
-          const _EmptyState(),
+          _EmptyState(lang: lang),
         ] else ...[
           // ── Mood Trend Line (#1) ─────────────────────────────────────────
-          _SectionTitle('Mood Trend'),
+          _SectionTitle(appStr(lang, 'mood_trend')),
           const SizedBox(height: 12),
           _MoodTrendChart(dataPoints: daily),
           const SizedBox(height: 24),
 
-          // ── Emotion Donut (#2) ───────────────────────────────────────────
-          _SectionTitle('Emotion Breakdown'),
+          // ── Emotion Donut (#2) ────────────────────────────────────────
+          _SectionTitle(appStr(lang, 'emotion_breakdown')),
           const SizedBox(height: 12),
           _EmotionDonutChart(distribution: emotionDist),
           const SizedBox(height: 24),
 
           // ── Heatmap Calendar (#4) ────────────────────────────────────────
-          _SectionTitle('Mood Calendar'),
+          _SectionTitle(appStr(lang, 'mood_calendar')),
           const SizedBox(height: 12),
           _MoodHeatmap(heatmap: heatmap),
           const SizedBox(height: 24),
 
-          // ── Session Activity Bar (#7) ────────────────────────────────────
-          _SectionTitle('Session Activity'),
+          // ── Session Activity Bar (#7) ──────────────────────────────────
+          _SectionTitle(appStr(lang, 'session_activity')),
           const SizedBox(height: 12),
           _SessionActivityChart(dataPoints: daily),
           const SizedBox(height: 24),
@@ -214,7 +219,8 @@ class _TimeFilterChips extends ConsumerWidget {
 // ─── Latest Emotion Card (#9) ─────────────────────────────────────────────────
 class _LatestEmotionCard extends StatelessWidget {
   final Map session;
-  const _LatestEmotionCard({required this.session});
+  final String lang;
+  const _LatestEmotionCard({required this.session, required this.lang});
 
   @override
   Widget build(BuildContext context) {
@@ -253,7 +259,7 @@ class _LatestEmotionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Latest Session',
+                Text(appStr(lang, 'latest_session'),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context)
                             .colorScheme
@@ -882,7 +888,8 @@ class _LegendDot extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final String lang;
+  const _EmptyState({required this.lang});
 
   @override
   Widget build(BuildContext context) {
@@ -893,10 +900,10 @@ class _EmptyState extends StatelessWidget {
         children: [
           const Text('🤗', style: TextStyle(fontSize: 48)),
           const SizedBox(height: 12),
-          Text('No sessions yet',
+          Text(appStr(lang, 'no_sessions'),
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
-          Text('Chat with Orbz to start tracking your mood.',
+          Text(appStr(lang, 'no_sessions_sub'),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context)
@@ -910,8 +917,9 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
+  final String lang;
   final VoidCallback onRetry;
-  const _ErrorState({required this.onRetry});
+  const _ErrorState({required this.lang, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -921,9 +929,9 @@ class _ErrorState extends StatelessWidget {
         children: [
           const Icon(Icons.wifi_off_rounded, size: 48, color: AppColors.error),
           const SizedBox(height: 12),
-          const Text('Could not load data'),
+          Text(appStr(lang, 'could_not_load')),
           const SizedBox(height: 12),
-          ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
+          ElevatedButton(onPressed: onRetry, child: Text(appStr(lang, 'retry'))),
         ],
       ),
     );

@@ -17,6 +17,7 @@ class MessageIn(BaseModel):
 class ChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     message: str
+    preferred_language: str = "English"
 
 
 class ConversationCreate(BaseModel):
@@ -137,6 +138,7 @@ async def chat(
         user_message=body.message,
         history=history,
         profile_context=profile_context,
+        preferred_lang=body.preferred_language,
     )
     ai_reply = ai_result["reply"]
     ai_sources = ai_result.get("sources", [])
