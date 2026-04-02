@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from typing import Optional, List
 import asyncio
 import json
 import logging
 import base64
+import os
 from app.auth import get_current_user_id
 from app.database import get_supabase
 from app.services.ai import emotional_buddy_respond, emotional_buddy_respond_stream
@@ -15,6 +16,28 @@ from app.services.stt import speech_to_text
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/buddy", tags=["emotional-buddy"])
+
+# ── Voice catalogue ────────────────────────────────────────────────────────────
+_VOICE_SAMPLE_TEXT = "Hi, I'm Orbz, your emotional wellness companion. I'm here to listen and support you."
+_VOICE_SAMPLE_DIR = "/tmp/buddy_voice_samples"
+
+VOICE_CATALOGUE: list[dict] = [
+    # Female voices
+    {"id": "priya",   "name": "Priya",   "gender": "female", "description": "Warm & gentle"},
+    {"id": "simran",  "name": "Simran",  "gender": "female", "description": "Calm & soothing"},
+    {"id": "kavya",   "name": "Kavya",   "gender": "female", "description": "Soft & empathetic"},
+    {"id": "shreya",  "name": "Shreya",  "gender": "female", "description": "Clear & friendly"},
+    {"id": "neha",    "name": "Neha",    "gender": "female", "description": "Bright & cheerful"},
+    {"id": "roopa",   "name": "Roopa",   "gender": "female", "description": "Mature & comforting"},
+    # Male voices
+    {"id": "aditya",  "name": "Aditya",  "gender": "male",   "description": "Calm & reassuring"},
+    {"id": "kabir",   "name": "Kabir",   "gender": "male",   "description": "Deep & grounding"},
+    {"id": "anand",   "name": "Anand",   "gender": "male",   "description": "Warm & supportive"},
+    {"id": "rohan",   "name": "Rohan",   "gender": "male",   "description": "Friendly & steady"},
+    {"id": "dev",     "name": "Dev",     "gender": "male",   "description": "Gentle & composed"},
+    {"id": "rahul",   "name": "Rahul",   "gender": "male",   "description": "Warm & natural"},
+]
+_VALID_SPEAKERS = {v["id"] for v in VOICE_CATALOGUE}
 
 
 class BuddyTextRequest(BaseModel):
@@ -259,6 +282,7 @@ async def chat_stream(
     history_json: Optional[str] = Form(default=None),
     preferred_language: str = Form(default="English"),
     session_group_id: Optional[str] = Form(default=None),
+    speaker: str = Form(default="priya"),
     user_id: str = Depends(get_current_user_id),
 ):
     """Streaming endpoint: accepts recorded audio, returns NDJSON stream.
@@ -280,6 +304,8 @@ async def chat_stream(
             history = []
 
     lang_code = _LANG_CODE.get(preferred_language, "en")
+    # Validate speaker — fall back to default if unknown
+    chosen_speaker = speaker if speaker in _VALID_SPEAKERS else "priya"
 
     async def _generate():
         # ── 1. STT + audio emotion in parallel ────────────────────────────
@@ -321,7 +347,7 @@ async def chat_stream(
 
             # TTS for this sentence
             try:
-                wav = await text_to_speech_bytes(sentence, lang_code)
+                wav = await text_to_speech_bytes(sentence, lang_code, chosen_speaker)
                 yield json.dumps({
                     "type": "audio",
                     "data": base64.b64encode(wav).decode(),
@@ -433,3 +459,42 @@ async def get_session_analytics(
     analytics["average_mood"] = round(sum(mood_scores) / len(mood_scores), 1) if mood_scores else 0.0
 
     return analytics
+
+
+# ── Voice selection endpoints ──────────────────────────────────────────────────
+
+@router.get("/voices")
+async def list_voices():
+    """Return voice catalogue. No auth required so preview is frictionless."""
+    return VOICE_CATALOGUE
+
+
+@router.get("/voices/{speaker_id}/sample")
+async def voice_sample(speaker_id: str):
+    """Serve a pre-generated WAV sample for the given speaker.
+
+    Lazily generates and caches the sample on first request so no separate
+    generation script is needed. Subsequent requests are served from disk.
+    """
+    if speaker_id not in _VALID_SPEAKERS:
+        raise HTTPException(status_code=404, detail="Unknown speaker")
+
+    os.makedirs(_VOICE_SAMPLE_DIR, exist_ok=True)
+    sample_path = os.path.join(_VOICE_SAMPLE_DIR, f"{speaker_id}.wav")
+
+    if not os.path.exists(sample_path):
+        # Generate sample using TTS
+        try:
+            wav_bytes = await text_to_speech_bytes(
+                _VOICE_SAMPLE_TEXT, lang="en", speaker=speaker_id,
+            )
+            with open(sample_path, "wb") as f:
+                f.write(wav_bytes)
+        except Exception as e:
+            logger.error("Failed to generate voice sample for %s: %s", speaker_id, e)
+            raise HTTPException(status_code=503, detail="Could not generate sample")
+
+    with open(sample_path, "rb") as f:
+        data = f.read()
+
+    return Response(content=data, media_type="audio/wav")

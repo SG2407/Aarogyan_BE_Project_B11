@@ -49,11 +49,12 @@ async def _fetch_chunk(
     chunk: str,
     lang_code: str,
     api_key: str,
+    speaker: str = _SPEAKER,
 ) -> bytes:
     payload = {
         "text": chunk,
         "target_language_code": lang_code,
-        "speaker": _SPEAKER,
+        "speaker": speaker,
         "model": "bulbul:v3",
         "pace": 1.0,
         "speech_sample_rate": 22050,
@@ -72,7 +73,7 @@ async def _fetch_chunk(
     return base64.b64decode(audios[0])
 
 
-async def text_to_speech_bytes(text: str, lang: str = "en") -> bytes:
+async def text_to_speech_bytes(text: str, lang: str = "en", speaker: str = _SPEAKER) -> bytes:
     """Convert text to WAV bytes using Sarvam AI bulbul:v3.
     Splits long text into chunks and concatenates raw WAV PCM data.
     Raises on failure.
@@ -85,7 +86,7 @@ async def text_to_speech_bytes(text: str, lang: str = "en") -> bytes:
     async with httpx.AsyncClient(timeout=20) as client:
         parts = await asyncio.wait_for(
             asyncio.gather(
-                *[_fetch_chunk(client, c, lang_code, api_key) for c in chunks]
+                *[_fetch_chunk(client, c, lang_code, api_key, speaker) for c in chunks]
             ),
             timeout=30,
         )

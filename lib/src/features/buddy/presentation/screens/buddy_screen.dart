@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vad/vad.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -35,6 +36,7 @@ class BuddyStateData {
   final double soundLevel; // 0.0–1.0, driven by mic input while listening
   final String? sessionGroupId;
   final Map<String, dynamic>? sessionSummary;
+  final String selectedSpeaker;
 
   const BuddyStateData({
     this.phase = BuddyPhase.idle,
@@ -46,6 +48,7 @@ class BuddyStateData {
     this.soundLevel = 0.0,
     this.sessionGroupId,
     this.sessionSummary,
+    this.selectedSpeaker = 'priya',
   });
 
   BuddyStateData copyWith({
@@ -58,6 +61,7 @@ class BuddyStateData {
     double? soundLevel,
     String? sessionGroupId,
     Map<String, dynamic>? sessionSummary,
+    String? selectedSpeaker,
   }) {
     return BuddyStateData(
       phase: phase ?? this.phase,
@@ -69,6 +73,7 @@ class BuddyStateData {
       soundLevel: soundLevel ?? this.soundLevel,
       sessionGroupId: sessionGroupId ?? this.sessionGroupId,
       sessionSummary: sessionSummary,
+      selectedSpeaker: selectedSpeaker ?? this.selectedSpeaker,
     );
   }
 }
@@ -138,6 +143,7 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
   BuddyStateData build() {
     _vad = VadHandler.create(isDebug: false);
     _setupVadListeners();
+    _loadSavedSpeaker();
 
     ref.onDispose(() {
       _disposed = true;
@@ -147,6 +153,20 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
       _player.dispose();
     });
     return const BuddyStateData();
+  }
+
+  Future<void> _loadSavedSpeaker() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('buddy_speaker');
+    if (saved != null && !_disposed) {
+      _set(state.copyWith(selectedSpeaker: saved));
+    }
+  }
+
+  Future<void> setSpeaker(String speakerId) async {
+    _set(state.copyWith(selectedSpeaker: speakerId));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('buddy_speaker', speakerId);
   }
 
   // ── VAD event wiring ────────────────────────────────────────────────────────
@@ -356,6 +376,7 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
         historyMaps,
         preferredLanguage: _preferredLang,
         sessionGroupId: state.sessionGroupId,
+        speaker: state.selectedSpeaker,
       )) {
         if (_disposed) return;
 
@@ -561,9 +582,6 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     final convState = _toConvState(s.phase);
     final displayText = s.lastReply ?? s.lastUserText ?? '';
 
-    // Show session summary dialog when available
-    // (Removed — mood data is available in Mental Health Tracker instead)
-
     return Scaffold(
       backgroundColor: const Color(0xFF071412),
       body: FadeTransition(
@@ -576,7 +594,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
               SafeArea(
                 child: Column(
                   children: [
-                    _buildTopBar(context),
+                    _buildTopBar(context, notifier, s),
                     Expanded(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -619,30 +637,62 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     );
   }
 
-  Widget _buildTopBar(BuildContext context) {
+  Widget _buildTopBar(
+      BuildContext context, BuddyNotifier notifier, BuddyStateData s) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Center(
-        child: Column(
-          children: [
-            const Text(
-              'Buddy',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+      child: Row(
+        children: [
+          // ── Instruction button (top-left) ──
+          _GlassIconButton(
+            icon: Icons.info_outline_rounded,
+            onTap: () => _showInstructionsDialog(context),
+          ),
+          const Spacer(),
+          // ── Title ──
+          Column(
+            children: [
+              const Text(
+                'Buddy',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-            Text(
-              'Your Emotional Companion',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.45),
-                fontSize: 11,
+              Text(
+                'Your Emotional Companion',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.45),
+                  fontSize: 11,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+          const Spacer(),
+          // ── Voice selection button (top-right) ──
+          _GlassIconButton(
+            icon: Icons.record_voice_over_rounded,
+            onTap: () => _showVoiceSelectionSheet(context, ref),
+          ),
+        ],
       ),
+    );
+  }
+
+  void _showInstructionsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => const _InstructionsDialog(),
+    );
+  }
+
+  void _showVoiceSelectionSheet(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _VoiceSelectionSheet(parentRef: ref),
     );
   }
 }
@@ -918,6 +968,426 @@ class _EndButton extends StatelessWidget {
                 letterSpacing: 0.3,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Glass icon button ────────────────────────────────────────────────────────
+class _GlassIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _GlassIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.08),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withOpacity(0.12)),
+        ),
+        child: Icon(icon, color: Colors.white.withOpacity(0.7), size: 20),
+      ),
+    );
+  }
+}
+
+// ─── Instructions dialog ──────────────────────────────────────────────────────
+class _InstructionsDialog extends StatelessWidget {
+  const _InstructionsDialog();
+
+  static const _tips = [
+    {
+      'icon': Icons.mic_rounded,
+      'title': 'Speak naturally',
+      'desc': 'Talk to Buddy like you would to a close friend. '
+          'There\'s no right or wrong way to express yourself.',
+    },
+    {
+      'icon': Icons.timer_rounded,
+      'title': 'Take your time',
+      'desc': 'Buddy waits for you — pauses while you think are fine. '
+          'Speak when you\'re ready.',
+    },
+    {
+      'icon': Icons.language_rounded,
+      'title': 'Use your language',
+      'desc': 'Speak in English, Hindi, or Marathi — Buddy understands and '
+          'replies in the same language.',
+    },
+    {
+      'icon': Icons.emoji_emotions_rounded,
+      'title': 'Be honest about feelings',
+      'desc': 'The more openly you share how you feel, the better Buddy can '
+          'support you and track your emotional health accurately.',
+    },
+    {
+      'icon': Icons.insights_rounded,
+      'title': 'Check your Tracker',
+      'desc': 'Visit Mental Health Tracker to see mood trends, emotion '
+          'patterns, and insights from your sessions.',
+    },
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 380),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F1F1C).withOpacity(0.95),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withOpacity(0.1)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 20),
+            const Text(
+              'How to use Buddy',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Tips for the best experience',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.45),
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ..._tips.map((tip) => _TipRow(
+                  icon: tip['icon'] as IconData,
+                  title: tip['title'] as String,
+                  desc: tip['desc'] as String,
+                )),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    backgroundColor: AppColors.primary.withOpacity(0.15),
+                    foregroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Got it',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TipRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String desc;
+  const _TipRow(
+      {required this.icon, required this.title, required this.desc});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: AppColors.primary, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    )),
+                const SizedBox(height: 2),
+                Text(desc,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.55),
+                      fontSize: 12,
+                      height: 1.4,
+                    )),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Voice selection bottom sheet ─────────────────────────────────────────────
+class _VoiceSelectionSheet extends StatefulWidget {
+  final WidgetRef parentRef;
+  const _VoiceSelectionSheet({required this.parentRef});
+
+  @override
+  State<_VoiceSelectionSheet> createState() => _VoiceSelectionSheetState();
+}
+
+class _VoiceSelectionSheetState extends State<_VoiceSelectionSheet> {
+  final _previewPlayer = AudioPlayer();
+  String? _loadingSpeaker;
+
+  static const _voices = [
+    // Female
+    {'id': 'priya', 'name': 'Priya', 'gender': 'female', 'desc': 'Warm & gentle'},
+    {'id': 'simran', 'name': 'Simran', 'gender': 'female', 'desc': 'Calm & soothing'},
+    {'id': 'kavya', 'name': 'Kavya', 'gender': 'female', 'desc': 'Soft & empathetic'},
+    {'id': 'shreya', 'name': 'Shreya', 'gender': 'female', 'desc': 'Clear & friendly'},
+    {'id': 'neha', 'name': 'Neha', 'gender': 'female', 'desc': 'Bright & cheerful'},
+    {'id': 'roopa', 'name': 'Roopa', 'gender': 'female', 'desc': 'Mature & comforting'},
+    // Male
+    {'id': 'aditya', 'name': 'Aditya', 'gender': 'male', 'desc': 'Calm & reassuring'},
+    {'id': 'kabir', 'name': 'Kabir', 'gender': 'male', 'desc': 'Deep & grounding'},
+    {'id': 'anand', 'name': 'Anand', 'gender': 'male', 'desc': 'Warm & supportive'},
+    {'id': 'rohan', 'name': 'Rohan', 'gender': 'male', 'desc': 'Friendly & steady'},
+    {'id': 'dev', 'name': 'Dev', 'gender': 'male', 'desc': 'Gentle & composed'},
+    {'id': 'rahul', 'name': 'Rahul', 'gender': 'male', 'desc': 'Warm & natural'},
+  ];
+
+  @override
+  void dispose() {
+    _previewPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _previewVoice(String speakerId) async {
+    setState(() => _loadingSpeaker = speakerId);
+    try {
+      final repo = widget.parentRef.read(buddyRepositoryProvider);
+      final url = repo.getVoiceSampleUrl(speakerId);
+      await _previewPlayer.setUrl(url);
+      await _previewPlayer.play();
+      // Wait for playback to complete
+      await _previewPlayer.playerStateStream.firstWhere(
+        (s) =>
+            s.processingState == ProcessingState.completed ||
+            s.processingState == ProcessingState.idle,
+      );
+    } catch (e) {
+      debugPrint('[Voice] preview error: $e');
+    }
+    if (mounted) setState(() => _loadingSpeaker = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentSpeaker =
+        widget.parentRef.watch(buddyNotifierProvider).selectedSpeaker;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 60),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.75,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F1F1C).withOpacity(0.97),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Choose a Voice',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Tap play to preview, select to apply',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.45),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).padding.bottom + 16),
+              children: _voices.map((v) {
+            final id = v['id'] as String;
+            final isSelected = id == currentSpeaker;
+            final isLoading = _loadingSpeaker == id;
+            return _VoiceTile(
+              name: v['name'] as String,
+              desc: v['desc'] as String,
+              gender: v['gender'] as String,
+              isSelected: isSelected,
+              isLoading: isLoading,
+              onPreview: () => _previewVoice(id),
+              onSelect: () {
+                widget.parentRef
+                    .read(buddyNotifierProvider.notifier)
+                    .setSpeaker(id);
+              },
+            );
+          }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VoiceTile extends StatelessWidget {
+  final String name;
+  final String desc;
+  final String gender;
+  final bool isSelected;
+  final bool isLoading;
+  final VoidCallback onPreview;
+  final VoidCallback onSelect;
+
+  const _VoiceTile({
+    required this.name,
+    required this.desc,
+    required this.gender,
+    required this.isSelected,
+    required this.isLoading,
+    required this.onPreview,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onSelect,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary.withOpacity(0.12)
+              : Colors.white.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary.withOpacity(0.4)
+                : Colors.white.withOpacity(0.06),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: (gender == 'female'
+                        ? const Color(0xFFE879A8)
+                        : const Color(0xFF5B8DEF))
+                    .withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                gender == 'female' ? Icons.face_3_rounded : Icons.face_rounded,
+                color: gender == 'female'
+                    ? const Color(0xFFE879A8)
+                    : const Color(0xFF5B8DEF),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                  Text(desc,
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.45),
+                          fontSize: 12)),
+                ],
+              ),
+            ),
+            // Play preview
+            GestureDetector(
+              onTap: onPreview,
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: isLoading
+                    ? Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white.withOpacity(0.5),
+                        ),
+                      )
+                    : Icon(Icons.play_arrow_rounded,
+                        color: Colors.white.withOpacity(0.7), size: 18),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Selected check
+            if (isSelected)
+              Icon(Icons.check_circle_rounded,
+                  color: AppColors.primary, size: 22)
+            else
+              Icon(Icons.circle_outlined,
+                  color: Colors.white.withOpacity(0.2), size: 22),
           ],
         ),
       ),

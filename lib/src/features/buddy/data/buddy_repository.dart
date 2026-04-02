@@ -41,6 +41,7 @@ class BuddyRepository {
     List<Map<String, String>> history, {
     String preferredLanguage = 'English',
     String? sessionGroupId,
+    String speaker = 'priya',
   }) async* {
     final formData = FormData.fromMap({
       'audio': await MultipartFile.fromFile(
@@ -51,6 +52,7 @@ class BuddyRepository {
       if (history.isNotEmpty) 'history_json': jsonEncode(history),
       'preferred_language': preferredLanguage,
       if (sessionGroupId != null) 'session_group_id': sessionGroupId,
+      'speaker': speaker,
     });
 
     final resp = await _dio.post(
@@ -138,6 +140,17 @@ class BuddyRepository {
       '/buddy/session-analytics/$sessionGroupId',
     );
     return resp.data as Map<String, dynamic>;
+  }
+
+  /// Fetch the voice catalogue (no auth required).
+  Future<List<Map<String, dynamic>>> getVoices() async {
+    final resp = await _dio.get('/buddy/voices');
+    return (resp.data as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Build the URL for a voice sample WAV file.
+  String getVoiceSampleUrl(String speakerId) {
+    return '${_dio.options.baseUrl}/buddy/voices/$speakerId/sample';
   }
 }
 
