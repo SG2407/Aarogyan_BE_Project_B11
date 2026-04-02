@@ -47,10 +47,11 @@ dependencies:
   speech_to_text: ^7.0.0
 
   # Audio (for Orbz voice)
-  record: ^5.2.0
+  record: ^6.2.0
   just_audio: ^0.10.4
   audioplayers: ^6.4.0
   permission_handler: ^11.4.0
+  vad: ^0.0.7+1
 
   # PDF
   printing: ^5.14.2

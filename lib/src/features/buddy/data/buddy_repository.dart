@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:http_parser/http_parser.dart';
@@ -31,6 +32,51 @@ class BuddyRepository {
       ),
     );
     return resp.data as Map<String, dynamic>;
+  }
+
+  /// Streaming path — sends recorded audio, receives NDJSON stream of events:
+  ///   transcript → sentence text → sentence audio (base64 WAV) → done
+  Stream<Map<String, dynamic>> streamChat(
+    String audioFilePath,
+    List<Map<String, String>> history, {
+    String preferredLanguage = 'English',
+    String? sessionGroupId,
+  }) async* {
+    final formData = FormData.fromMap({
+      'audio': await MultipartFile.fromFile(
+        audioFilePath,
+        filename: 'voice.wav',
+        contentType: MediaType('audio', 'wav'),
+      ),
+      if (history.isNotEmpty) 'history_json': jsonEncode(history),
+      'preferred_language': preferredLanguage,
+      if (sessionGroupId != null) 'session_group_id': sessionGroupId,
+    });
+
+    final resp = await _dio.post(
+      '/buddy/chat-stream',
+      data: formData,
+      options: Options(
+        responseType: ResponseType.stream,
+        receiveTimeout: const Duration(minutes: 5),
+        sendTimeout: const Duration(minutes: 2),
+      ),
+    );
+
+    final stream = (resp.data as ResponseBody).stream;
+    String buffer = '';
+
+    await for (final chunk in stream) {
+      buffer += utf8.decode(chunk);
+      while (buffer.contains('\n')) {
+        final idx = buffer.indexOf('\n');
+        final line = buffer.substring(0, idx).trim();
+        buffer = buffer.substring(idx + 1);
+        if (line.isNotEmpty) {
+          yield jsonDecode(line) as Map<String, dynamic>;
+        }
+      }
+    }
   }
 
   /// Legacy audio path — kept for future use or fallback.

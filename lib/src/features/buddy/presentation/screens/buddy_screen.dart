@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:vad/vad.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -73,40 +74,143 @@ class BuddyStateData {
 }
 
 // ─── Notifier ─────────────────────────────────────────────────────────────────
-const _sttLocale = {
-  'English': 'en-US',
-  'Hindi': 'hi-IN',
-  'Marathi': 'mr-IN',
-};
+
+/// Convert PCM float samples (–1.0 … 1.0, 16 kHz mono) to a valid WAV file.
+Uint8List _samplesToWav(List<double> samples, {int sampleRate = 16000}) {
+  final pcm16 = Int16List(samples.length);
+  for (int i = 0; i < samples.length; i++) {
+    pcm16[i] = (samples[i] * 32767).clamp(-32768, 32767).toInt();
+  }
+  final pcmBytes = pcm16.buffer.asUint8List();
+  final header = ByteData(44);
+  void _ascii(int offset, String s) {
+    for (int i = 0; i < s.length; i++) {
+      header.setUint8(offset + i, s.codeUnitAt(i));
+    }
+  }
+
+  _ascii(0, 'RIFF');
+  header.setUint32(4, 36 + pcmBytes.length, Endian.little);
+  _ascii(8, 'WAVE');
+  _ascii(12, 'fmt ');
+  header.setUint32(16, 16, Endian.little); // PCM chunk size
+  header.setUint16(20, 1, Endian.little); // PCM format
+  header.setUint16(22, 1, Endian.little); // mono
+  header.setUint32(24, sampleRate, Endian.little);
+  header.setUint32(28, sampleRate * 2, Endian.little); // byte rate
+  header.setUint16(32, 2, Endian.little); // block align
+  header.setUint16(34, 16, Endian.little); // bits per sample
+  _ascii(36, 'data');
+  header.setUint32(40, pcmBytes.length, Endian.little);
+
+  return Uint8List.fromList([...header.buffer.asUint8List(), ...pcmBytes]);
+}
 
 class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
-  final _speech = stt.SpeechToText();
+  late final VadHandler _vad;
   final _player = AudioPlayer();
 
-  bool _speechInitialised = false;
   bool _disposed = false;
   String _preferredLang = 'English';
 
-  /// Partial transcript while speech-to-text is running
-  String _partialTranscript = '';
-
-  /// Guard against _processText being called twice for the same utterance
+  /// Guard against overlapping processing cycles
   bool _processing = false;
+
+  /// Audio chunk playback queue (base64-encoded WAV)
+  final _audioQueue = <String>[];
+  bool _playingQueue = false;
+
+  /// Accumulated speech samples across thinking-pause segments.
+  /// If the user pauses briefly (< post-speech wait), segments are merged.
+  final _pendingSamples = <double>[];
+  Timer? _postSpeechTimer;
+  bool _vadListening = false;
+
+  // ── Tuning constants ────────────────────────────────────────────────────────
+  // Legacy Silero model: 1 frame ≈ 96 ms
+  static const _redemptionFrames = 20; // ~1.92 s silence before onSpeechEnd
+  static const _minSpeechFrames = 5; // ~480 ms minimum speech
+  static const _postSpeechWaitMs = 1500; // 1.5 s extra wait after onSpeechEnd
+  // Total pause tolerance: ~1.92 + 1.5 = ~3.4 s  — handles thinking pauses
+  static const _maxPendingSamples = 16000 * 60; // 60 s hard cap
 
   @override
   BuddyStateData build() {
+    _vad = VadHandler.create(isDebug: false);
+    _setupVadListeners();
+
     ref.onDispose(() {
       _disposed = true;
-      _speech.stop();
+      _postSpeechTimer?.cancel();
+      if (_vadListening) _vad.stopListening().catchError((_) {});
+      _vad.dispose();
       _player.dispose();
     });
     return const BuddyStateData();
   }
 
+  // ── VAD event wiring ────────────────────────────────────────────────────────
+
+  void _setupVadListeners() {
+    // User started making a sound — cancel post-speech timer so we keep
+    // accumulating instead of committing prematurely.
+    _vad.onSpeechStart.listen((_) {
+      if (_disposed || !state.conversationActive || _processing) return;
+      _postSpeechTimer?.cancel();
+      debugPrint('[Buddy] VAD: speech start (timer cancelled)');
+    });
+
+    // Confirmed real speech (past minSpeechFrames) — show "Listening…"
+    _vad.onRealSpeechStart.listen((_) {
+      if (_disposed || !state.conversationActive || _processing) return;
+      debugPrint('[Buddy] VAD: real speech started');
+      _set(state.copyWith(phase: BuddyPhase.listening));
+    });
+
+    // Speech segment ended — accumulate samples and start post-speech timer.
+    _vad.onSpeechEnd.listen((List<double> samples) {
+      if (_disposed || !state.conversationActive || _processing) return;
+      debugPrint('[Buddy] VAD: speech ended — ${samples.length} samples '
+          '(pending total: ${_pendingSamples.length + samples.length})');
+      _pendingSamples.addAll(samples);
+
+      // Hard cap: if speech exceeds 60 s, commit immediately
+      if (_pendingSamples.length >= _maxPendingSamples) {
+        debugPrint('[Buddy] Max pending samples reached — committing');
+        _commitSpeech();
+        return;
+      }
+      _startPostSpeechTimer();
+    });
+
+    // Misfire (sound too short to be speech). If we have pending samples and
+    // the timer was just cancelled by onSpeechStart, restart it so we don't
+    // hang indefinitely.
+    _vad.onVADMisfire.listen((_) {
+      if (_disposed || !state.conversationActive || _processing) return;
+      debugPrint('[Buddy] VAD: misfire');
+      if (_pendingSamples.isNotEmpty && !(_postSpeechTimer?.isActive ?? false)) {
+        _startPostSpeechTimer();
+      }
+    });
+
+    // Per-frame speech probability → drive orb animation
+    _vad.onFrameProcessed.listen((frameData) {
+      if (_disposed || !state.conversationActive || _processing) return;
+      _set(state.copyWith(soundLevel: frameData.isSpeech.clamp(0.0, 1.0)));
+    });
+
+    _vad.onError.listen((String msg) {
+      debugPrint('[Buddy] VAD error: $msg');
+      if (!_disposed) {
+        _set(state.copyWith(
+            phase: BuddyPhase.idle, error: 'Voice detection error: $msg'));
+      }
+    });
+  }
+
   // ── Public API ──────────────────────────────────────────────────────────────
 
-  /// Called when user taps "Start Conversation".
-  /// Initialises on-device STT and immediately starts listening.
   Future<void> startConversation({String preferredLang = 'English'}) async {
     _preferredLang = preferredLang;
     final groupId = const Uuid().v4();
@@ -117,28 +221,28 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
       soundLevel: 0.0,
       sessionGroupId: groupId,
     ));
-    await _initSpeech();
-    if (_speechInitialised) {
-      await _startListening();
-    } else {
-      _set(state.copyWith(
-        error: 'Microphone permission denied or Speech not available.',
-      ));
-    }
+    await _startVadListening();
   }
 
-  /// Called when user taps the interrupt button during playback.
   Future<void> interrupt() async {
     await _player.stop();
+    _audioQueue.clear();
+    _playingQueue = false;
     _set(state.copyWith(phase: BuddyPhase.idle, soundLevel: 0.0));
-    await _startListening();
+    await _startVadListening();
   }
 
   Future<void> endConversation() async {
-    await _speech.stop();
+    _postSpeechTimer?.cancel();
+    _pendingSamples.clear();
+    if (_vadListening) {
+      await _vad.stopListening().catchError((_) {});
+      _vadListening = false;
+    }
     await _player.stop();
-    _partialTranscript = '';
-
+    _audioQueue.clear();
+    _playingQueue = false;
+    _processing = false;
     _set(const BuddyStateData());
   }
 
@@ -152,141 +256,184 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     if (!_disposed) state = s;
   }
 
-  Future<void> _initSpeech() async {
-    if (_speechInitialised) return;
-    _speechInitialised = await _speech.initialize(
-      onStatus: _onSpeechStatus,
-      onError: (e) {
-        if (_disposed) return;
-        _set(state.copyWith(
-          phase: BuddyPhase.idle,
-          error: 'Speech error: ${e.errorMsg}',
-          soundLevel: 0.0,
-        ));
-      },
-    );
-  }
-
-  /// Start on-device speech recognition.
-  /// `pauseFor` acts as the on-device VAD — auto-finalises after 5 s of silence.
-  Future<void> _startListening() async {
+  /// Start the Silero VAD. The package manages its own AudioRecorder internally.
+  Future<void> _startVadListening() async {
     if (_disposed || !state.conversationActive) return;
-    if (!_speechInitialised) return;
 
-    _partialTranscript = '';
-    _set(state.copyWith(
-        phase: BuddyPhase.listening, error: null, soundLevel: 0.0));
-
-    await _speech.listen(
-      onResult: _onResult,
-      listenFor: const Duration(seconds: 60),
-      pauseFor: const Duration(seconds: 5),
-      localeId: _sttLocale[_preferredLang] ?? 'en-US',
-      onSoundLevelChange: (level) {
-        // SpeechToText reports roughly –2..10 dB; normalise to 0..1
-        final norm = ((level + 2) / 12).clamp(0.0, 1.0);
-        _set(state.copyWith(soundLevel: norm));
-      },
-      listenOptions: stt.SpeechListenOptions(
-        cancelOnError: false,
-        partialResults: true,
-      ),
-    );
-  }
-
-  /// Called on every partial/final recognition event.
-  void _onResult(SpeechRecognitionResult result) {
-    if (_disposed) return;
-    _partialTranscript = result.recognizedWords;
-
-    if (result.finalResult && _partialTranscript.trim().isNotEmpty) {
-      if (!_processing) _processText(_partialTranscript.trim());
-    }
-  }
-
-  /// SpeechToText status callback — 'done' fires when `pauseFor` silence is
-  /// reached without a `finalResult=true` callback arriving first.
-  void _onSpeechStatus(String status) {
-    if (_disposed) return;
-    if (status == 'done' &&
-        state.phase == BuddyPhase.listening &&
-        _partialTranscript.trim().isNotEmpty) {
-      if (!_processing) _processText(_partialTranscript.trim());
-    }
-  }
-
-  /// Send recognised text to backend, play the response, then loop back to
-  /// listening — completing the fully autonomous conversation cycle.
-  Future<void> _processText(String userText) async {
-    if (_disposed || _processing) return;
-    _processing = true;
-    await _speech.stop();
-    _partialTranscript = '';
-
-    debugPrint('[Buddy] _processText called with: "$userText"');
+    _pendingSamples.clear();
+    _postSpeechTimer?.cancel();
 
     _set(state.copyWith(
-      phase: BuddyPhase.processing,
-      lastUserText: userText,
+      phase: BuddyPhase.listening,
+      error: null,
       soundLevel: 0.0,
     ));
 
     try {
+      await _vad.startListening(
+        redemptionFrames: _redemptionFrames,
+        minSpeechFrames: _minSpeechFrames,
+        positiveSpeechThreshold: 0.5,
+        negativeSpeechThreshold: 0.35,
+        preSpeechPadFrames: 3,
+        frameSamples: 1536,
+        model: 'legacy',
+      );
+      _vadListening = true;
+      debugPrint('[Buddy] VAD listening started');
+    } catch (e) {
+      debugPrint('[Buddy] VAD startListening failed: $e');
+      _set(state.copyWith(
+        phase: BuddyPhase.idle,
+        error: 'Microphone error — please check permissions.',
+      ));
+    }
+  }
+
+  void _startPostSpeechTimer() {
+    _postSpeechTimer?.cancel();
+    _postSpeechTimer = Timer(
+      const Duration(milliseconds: _postSpeechWaitMs),
+      _commitSpeech,
+    );
+  }
+
+  /// Commit all accumulated speech segments → WAV file → backend.
+  Future<void> _commitSpeech() async {
+    if (_processing || _disposed || _pendingSamples.isEmpty) return;
+    _processing = true;
+    _postSpeechTimer?.cancel();
+
+    final sampleCount = _pendingSamples.length;
+    debugPrint('[Buddy] Committing speech: $sampleCount samples '
+        '(≈${(sampleCount / 16000).toStringAsFixed(1)}s)');
+
+    try {
+      // Stop VAD while processing / playing response
+      if (_vadListening) {
+        await _vad.stopListening().catchError((_) {});
+        _vadListening = false;
+      }
+
+      // Convert to WAV and save to temp file
+      final wavBytes = _samplesToWav(List.of(_pendingSamples));
+      _pendingSamples.clear();
+
+      final dir = await getTemporaryDirectory();
+      final path =
+          '${dir.path}/buddy_vad_${DateTime.now().millisecondsSinceEpoch}.wav';
+      await File(path).writeAsBytes(wavBytes);
+
+      debugPrint('[Buddy] WAV file: ${wavBytes.length} bytes → $path');
+      _set(state.copyWith(phase: BuddyPhase.processing, soundLevel: 0.0));
+      await _processAudio(path);
+    } catch (e) {
+      debugPrint('[Buddy] commitSpeech error: $e');
+      _processing = false;
+      _pendingSamples.clear();
+      if (!_disposed && state.conversationActive) {
+        _set(state.copyWith(
+            phase: BuddyPhase.idle, error: 'Processing error.'));
+        await Future.delayed(const Duration(seconds: 2));
+        await _startVadListening();
+      }
+    }
+  }
+
+  /// Upload audio to /buddy/chat-stream and handle the NDJSON event stream.
+  Future<void> _processAudio(String audioPath) async {
+    try {
       final repo = ref.read(buddyRepositoryProvider);
       final historyMaps = state.history.map((t) => t.toMap()).toList();
-      debugPrint('[Buddy] Sending text to backend...');
-      final result = await repo.sendText(
-        userText,
+
+      debugPrint('[Buddy] Uploading audio to chat-stream...');
+
+      String userText = '';
+      String fullReply = '';
+
+      await for (final event in repo.streamChat(
+        audioPath,
         historyMaps,
         preferredLanguage: _preferredLang,
         sessionGroupId: state.sessionGroupId,
-      );
-      debugPrint('[Buddy] Backend responded: ${result.keys}');
+      )) {
+        if (_disposed) return;
 
-      if (_disposed) return;
+        final type = event['type'] as String?;
 
-      final reply = result['buddy_text'] as String? ?? '';
-      final audioBase64 = result['audio_base64'] as String?;
-      debugPrint('[Buddy] Reply: "${reply.substring(0, reply.length.clamp(0, 80))}..."');
-      debugPrint('[Buddy] Audio base64 length: ${audioBase64?.length ?? 0}');
+        switch (type) {
+          case 'transcript':
+            userText = event['text'] as String? ?? '';
+            debugPrint('[Buddy] Transcript: "$userText"');
+            _set(state.copyWith(
+              lastUserText: userText,
+              phase: BuddyPhase.processing,
+            ));
+            break;
 
-      final newHistory = [
-        ...state.history,
-        ConversationTurn(role: 'user', content: userText),
-        ConversationTurn(role: 'assistant', content: reply),
-      ];
-      // Keep last 10 turns (20 messages) to bound context size
-      final trimmed = newHistory.length > 20
-          ? newHistory.sublist(newHistory.length - 20)
-          : newHistory;
+          case 'sentence':
+            final sentence = event['text'] as String? ?? '';
+            fullReply += (fullReply.isEmpty ? '' : ' ') + sentence;
+            debugPrint('[Buddy] Sentence ${event['index']}: "$sentence"');
+            _set(state.copyWith(
+              lastReply: fullReply,
+              phase: BuddyPhase.playing,
+            ));
+            break;
 
-      _set(state.copyWith(
-        phase: BuddyPhase.playing,
-        lastReply: reply,
-        history: trimmed,
-        error: null,
-      ));
+          case 'audio':
+            final b64 = event['data'] as String?;
+            if (b64 != null && b64.isNotEmpty) {
+              _enqueueAudio(b64);
+            }
+            break;
 
-      if (audioBase64 != null && audioBase64.isNotEmpty) {
-        await _playBase64Audio(audioBase64);
+          case 'done':
+            final reply = event['full_reply'] as String? ?? fullReply;
+            debugPrint('[Buddy] Stream done. Reply: '
+                '"${reply.substring(0, reply.length.clamp(0, 80))}"');
+            final newHistory = [
+              ...state.history,
+              ConversationTurn(role: 'user', content: userText),
+              ConversationTurn(role: 'assistant', content: reply),
+            ];
+            final trimmed = newHistory.length > 20
+                ? newHistory.sublist(newHistory.length - 20)
+                : newHistory;
+            _set(state.copyWith(
+              lastReply: reply,
+              history: trimmed,
+              error: null,
+            ));
+            break;
+
+          case 'error':
+            debugPrint('[Buddy] Stream error: ${event['message']}');
+            _set(state.copyWith(
+              phase: BuddyPhase.idle,
+              error: event['message'] as String? ?? 'Server error',
+            ));
+            break;
+        }
       }
 
-      // Auto-loop: restart listening once audio finishes
-      if (_disposed) return;
-      if (state.conversationActive && state.phase == BuddyPhase.playing) {
+      // Wait for audio queue to finish playing
+      await _waitForQueueDone();
+
+      // Auto-loop: restart VAD listening
+      if (!_disposed && state.conversationActive) {
         _processing = false;
-        await _startListening();
+        await _startVadListening();
         return;
       }
     } catch (e) {
-      debugPrint('[Buddy] ERROR in _processText: $e');
+      debugPrint('[Buddy] ERROR in _processAudio: $e');
       if (_disposed) return;
       String msg = 'Something went wrong — please try again.';
       int retryDelay = 2;
 
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
-        // 404 / 502 / 503 → HF Space cold-start or sleeping; retry after longer pause
         if (statusCode == 404 || statusCode == 502 || statusCode == 503) {
           msg = appStr(_preferredLang, 'service_starting');
           retryDelay = 10;
@@ -302,7 +449,7 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
       await Future.delayed(Duration(seconds: retryDelay));
       if (!_disposed && state.conversationActive) {
         _processing = false;
-        await _startListening();
+        await _startVadListening();
         return;
       }
     } finally {
@@ -310,10 +457,36 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     }
   }
 
+  // ── Audio queue playback ────────────────────────────────────────────────────
+
+  void _enqueueAudio(String base64Audio) {
+    _audioQueue.add(base64Audio);
+    if (!_playingQueue) _playQueue();
+  }
+
+  Future<void> _playQueue() async {
+    _playingQueue = true;
+    while (_audioQueue.isNotEmpty) {
+      if (_disposed) break;
+      final chunk = _audioQueue.removeAt(0);
+      await _playBase64Audio(chunk);
+    }
+    _playingQueue = false;
+  }
+
+  Future<void> _waitForQueueDone() async {
+    // Wait until the queue drains and playback finishes
+    while (_playingQueue) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (_disposed) return;
+    }
+  }
+
   Future<void> _playBase64Audio(String base64Audio) async {
     final bytes = base64Decode(base64Audio);
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/buddy_response.wav');
+    final file = File(
+        '${dir.path}/buddy_chunk_${DateTime.now().millisecondsSinceEpoch}.wav');
     await file.writeAsBytes(bytes);
     await _player.setFilePath(file.path);
     await _player.play();

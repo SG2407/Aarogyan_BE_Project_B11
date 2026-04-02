@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
+import asyncio
 import json
 import logging
 import base64
 from app.auth import get_current_user_id
 from app.database import get_supabase
-from app.services.ai import emotional_buddy_respond
+from app.services.ai import emotional_buddy_respond, emotional_buddy_respond_stream
 from app.services.tts import text_to_speech_bytes
 from app.services.stt import speech_to_text
 
@@ -243,6 +245,123 @@ async def analyze_voice_emotion(
         "fused_emotion_probs": fused_probs,
         "dominant_emotion": fused_dominant,
     }
+
+
+# Emotion → approximate mood score (1-10)
+_EMOTION_MOOD_MAP: dict[str, int] = {
+    "happy": 8, "neutral": 5, "sad": 3, "angry": 2,
+}
+
+
+@router.post("/chat-stream")
+async def chat_stream(
+    audio: UploadFile = File(...),
+    history_json: Optional[str] = Form(default=None),
+    preferred_language: str = Form(default="English"),
+    session_group_id: Optional[str] = Form(default=None),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Streaming endpoint: accepts recorded audio, returns NDJSON stream.
+
+    Events:
+      {"type":"transcript","text":"...","emotion":"...","emotion_probs":{...}}
+      {"type":"sentence","text":"...","index":0}
+      {"type":"audio","data":"<base64 wav>","index":0}
+      {"type":"done","session_id":"...","emotion":"...","mood_score":5,"full_reply":"..."}
+    """
+    audio_bytes = await audio.read()
+    content_type = audio.content_type or "audio/wav"
+
+    history: list[dict] = []
+    if history_json:
+        try:
+            history = json.loads(history_json)
+        except (json.JSONDecodeError, ValueError):
+            history = []
+
+    lang_code = _LANG_CODE.get(preferred_language, "en")
+
+    async def _generate():
+        # ── 1. STT + audio emotion in parallel ────────────────────────────
+        user_text, audio_probs = await asyncio.gather(
+            speech_to_text(audio_bytes, content_type),
+            asyncio.to_thread(_detect_audio_emotion_ml, audio_bytes),
+        )
+
+        if not user_text or not user_text.strip():
+            yield json.dumps({"type": "error", "message": "Could not transcribe audio"}) + "\n"
+            return
+
+        # Text emotion + fusion
+        text_probs = _detect_emotion_ml(user_text)
+        fused_probs = _fuse_emotions(user_text, text_probs, audio_probs)
+        fused_dominant = max(fused_probs, key=lambda k: fused_probs[k])
+
+        # Yield transcript event
+        yield json.dumps({
+            "type": "transcript",
+            "text": user_text,
+            "emotion": fused_dominant,
+            "emotion_probs": fused_probs,
+        }) + "\n"
+
+        # ── 2. Stream LLM → sentence-wise TTS ────────────────────────────
+        full_reply = ""
+        idx = 0
+
+        async for sentence in emotional_buddy_respond_stream(
+            user_text, history, preferred_language
+        ):
+            full_reply += (" " if full_reply else "") + sentence
+
+            # Sentence text event
+            yield json.dumps({
+                "type": "sentence", "text": sentence, "index": idx,
+            }) + "\n"
+
+            # TTS for this sentence
+            try:
+                wav = await text_to_speech_bytes(sentence, lang_code)
+                yield json.dumps({
+                    "type": "audio",
+                    "data": base64.b64encode(wav).decode(),
+                    "index": idx,
+                }) + "\n"
+            except Exception as tts_err:
+                logger.warning("TTS failed for sentence %d: %s", idx, tts_err)
+
+            idx += 1
+
+        # ── 3. Persist session ────────────────────────────────────────────
+        mood_score = _EMOTION_MOOD_MAP.get(fused_dominant, 5)
+        session_id = None
+        try:
+            db = get_supabase()
+            row: dict = {
+                "user_id": user_id,
+                "user_text": user_text,
+                "buddy_text": full_reply.strip(),
+                "mood_score": mood_score,
+                "emotion": fused_dominant,
+                "emotion_probs": json.dumps(fused_probs),
+            }
+            if session_group_id:
+                row["session_group_id"] = session_group_id
+            result = db.table("emotional_sessions").insert(row).execute()
+            session_id = result.data[0]["id"] if result.data else None
+        except Exception as db_err:
+            logger.error("Session DB insert failed: %s", db_err, exc_info=True)
+
+        # ── 4. Done event ─────────────────────────────────────────────────
+        yield json.dumps({
+            "type": "done",
+            "session_id": session_id,
+            "emotion": fused_dominant,
+            "mood_score": mood_score,
+            "full_reply": full_reply.strip(),
+        }) + "\n"
+
+    return StreamingResponse(_generate(), media_type="application/x-ndjson")
 
 
 @router.get("/sessions")

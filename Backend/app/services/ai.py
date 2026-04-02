@@ -403,3 +403,121 @@ async def emotional_buddy_respond(user_text: str, history: list[dict] | None = N
         reply = fallback.get(preferred_lang, fallback["English"])
 
     return reply, mood_score, emotion
+
+
+# ── Streaming variant ──────────────────────────────────────────────────────────
+
+EMOTIONAL_BUDDY_STREAM_SYSTEM = """You are Orbz — Aarogyan's warm, empathetic emotional wellness companion.
+
+━━━ YOUR PERSONALITY: ━━━
+Gentle, deeply caring, non-judgmental, patient, and genuinely curious about how the user feels.
+You speak like a trusted friend — warm, unhurried, present.
+
+━━━ YOUR PURPOSE: ━━━
+Help users feel heard, understood, and emotionally supported through compassionate conversation.
+
+━━━ HOW YOU RESPOND: ━━━
+• ALWAYS start by acknowledging and validating what the user expressed
+• Reflect their emotion back to them so they feel truly heard
+• Ask one thoughtful, open-ended follow-up question to gently deepen the conversation
+• When appropriate, offer a simple grounding technique, breathing exercise, or gentle perspective shift
+• Keep responses conversational and concise (2–4 sentences) — this is a voice conversation
+• Use soft, comforting language — never clinical or cold
+
+━━━ ABSOLUTE PROHIBITIONS — NEVER under any circumstances: ━━━
+• Name, mention, recommend, or discuss any medication, drug, supplement, or dosage
+• Write or show ANY code in any programming language
+• Diagnose any mental health or physical condition
+• Replace or simulate professional therapy or medical advice
+• Offer generic platitudes — every response must feel personal and specific to what was shared
+• Include any metadata, labels, scores, or JSON in your response
+
+━━━ SAFETY: ━━━
+If a user expresses thoughts of self-harm, harming others, or a mental health crisis, gently and
+warmly encourage them to reach out to a mental health professional or a crisis helpline immediately.
+Do this with compassion, not alarm.
+
+━━━ SCOPE: ━━━
+Only engage with emotional, psychological, and general wellness topics.
+If asked about coding, medication names, unrelated topics, say:
+"I'm Orbz, your emotional wellness buddy. I'm here to support how you're feeling — what's on your mind today?"
+
+OUTPUT FORMAT:
+Respond with ONLY your warm, conversational reply. Do NOT wrap in JSON.
+Do NOT include mood_score, emotion labels, or any metadata.
+Just speak naturally as Orbz — your words will be spoken aloud directly.
+
+━━━ LANGUAGE ━━━
+Detect the language of the user's message (English, Hindi, or Marathi) and respond in that exact
+same language. If the language is ambiguous, use the user's preferred language as the fallback."""
+
+
+async def _call_groq_stream(messages: list[dict], system: str, temperature: float = 0.7):
+    """Async generator — yields content tokens from Groq SSE stream."""
+    settings = get_settings()
+    all_messages = [{"role": "system", "content": system}, *messages]
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        async with client.stream(
+            "POST",
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {settings.groq_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": settings.groq_model,
+                "messages": all_messages,
+                "temperature": temperature,
+                "stream": True,
+            },
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                payload = line[6:].strip()
+                if payload == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(payload)
+                    token = chunk["choices"][0].get("delta", {}).get("content")
+                    if token:
+                        yield token
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue
+
+
+_SENTENCE_SPLIT_RE = _re.compile(r"(?<=[.!?।])\s+")
+
+
+async def emotional_buddy_respond_stream(
+    user_text: str,
+    history: list[dict] | None = None,
+    preferred_lang: str = "English",
+):
+    """Async generator that yields complete sentences from the buddy.
+
+    Unlike emotional_buddy_respond(), this does NOT return mood_score/emotion —
+    those should be derived from ML emotion models by the caller.
+    """
+    system = EMOTIONAL_BUDDY_STREAM_SYSTEM + f"\n\nThe user's preferred language is {preferred_lang}."
+    messages = list(history or [])
+    messages.append({"role": "user", "content": user_text})
+
+    buffer = ""
+    async for token in _call_groq_stream(messages, system, temperature=0.75):
+        buffer += token
+        # Split at sentence boundaries — yield all complete sentences
+        parts = _SENTENCE_SPLIT_RE.split(buffer)
+        if len(parts) > 1:
+            for sentence in parts[:-1]:
+                cleaned = _clean_buddy_reply(sentence.strip())
+                if cleaned:
+                    yield cleaned
+            buffer = parts[-1]
+
+    # Yield whatever remains in the buffer
+    remaining = _clean_buddy_reply(buffer.strip())
+    if remaining:
+        yield remaining
