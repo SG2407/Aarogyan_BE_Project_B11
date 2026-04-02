@@ -223,6 +223,8 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     await _speech.stop();
     _partialTranscript = '';
 
+    debugPrint('[Buddy] _processText called with: "$userText"');
+
     _set(state.copyWith(
       phase: BuddyPhase.processing,
       lastUserText: userText,
@@ -232,17 +234,21 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     try {
       final repo = ref.read(buddyRepositoryProvider);
       final historyMaps = state.history.map((t) => t.toMap()).toList();
+      debugPrint('[Buddy] Sending text to backend...');
       final result = await repo.sendText(
         userText,
         historyMaps,
         preferredLanguage: _preferredLang,
         sessionGroupId: state.sessionGroupId,
       );
+      debugPrint('[Buddy] Backend responded: ${result.keys}');
 
       if (_disposed) return;
 
       final reply = result['buddy_text'] as String? ?? '';
       final audioBase64 = result['audio_base64'] as String?;
+      debugPrint('[Buddy] Reply: "${reply.substring(0, reply.length.clamp(0, 80))}..."');
+      debugPrint('[Buddy] Audio base64 length: ${audioBase64?.length ?? 0}');
 
       final newHistory = [
         ...state.history,
@@ -268,9 +274,12 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
       // Auto-loop: restart listening once audio finishes
       if (_disposed) return;
       if (state.conversationActive && state.phase == BuddyPhase.playing) {
+        _processing = false;
         await _startListening();
+        return;
       }
     } catch (e) {
+      debugPrint('[Buddy] ERROR in _processText: $e');
       if (_disposed) return;
       String msg = 'Something went wrong — please try again.';
       int retryDelay = 2;
@@ -292,10 +301,13 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
       _set(state.copyWith(phase: BuddyPhase.idle, error: msg));
       await Future.delayed(Duration(seconds: retryDelay));
       if (!_disposed && state.conversationActive) {
+        _processing = false;
         await _startListening();
+        return;
       }
+    } finally {
+      _processing = false;
     }
-    _processing = false;
   }
 
   Future<void> _playBase64Audio(String base64Audio) async {
@@ -739,4 +751,3 @@ class _EndButton extends StatelessWidget {
     );
   }
 }
-
