@@ -1,21 +1,35 @@
 """
-Text-to-Speech service using Google Translate TTS API via httpx.
-Free, no API key, no conflicting package dependencies. Returns MP3 bytes.
+Text-to-Speech service using Sarvam AI (bulbul:v3).
+Reads SARVAM_API_KEY from .env via app.config.
+Returns WAV bytes decoded from the API's base64 audio response.
 """
 import asyncio
+import base64
+import re
 import httpx
 
-_MAX_CHARS = 100  # Google Translate TTS hard limit per request
+from app.config import get_settings
+
+_SARVAM_TTS_URL = "https://api.sarvam.ai/text-to-speech"
+_MAX_CHARS = 500  # Sarvam recommended max per input
+
+# Map short codes → Sarvam BCP-47 codes
+_LANG_MAP: dict[str, str] = {
+    "en": "en-IN",
+    "hi": "hi-IN",
+    "mr": "mr-IN",
+}
+
+# Single warm speaker suitable for emotional-support use-case (bulbul:v3 female)
+_SPEAKER = "priya"
 
 
 def _split_text(text: str, limit: int = _MAX_CHARS) -> list[str]:
-    """Split text into chunks at sentence boundaries, each < limit chars."""
-    import re
+    """Split text into chunks at sentence boundaries, each ≤ limit chars."""
     sentences = re.split(r"(?<=[.!?])\s+", text.strip())
     chunks: list[str] = []
     current = ""
     for sentence in sentences:
-        # If a single sentence is too long, hard-split it
         while len(sentence) > limit:
             chunks.append(sentence[:limit])
             sentence = sentence[limit:]
@@ -30,32 +44,50 @@ def _split_text(text: str, limit: int = _MAX_CHARS) -> list[str]:
     return chunks or [text[:limit]]
 
 
-async def _fetch_chunk(client: httpx.AsyncClient, chunk: str, lang: str = "en") -> bytes:
-    url = "https://translate.google.com/translate_tts"
-    params = {
-        "ie": "UTF-8",
-        "q": chunk,
-        "tl": lang,
-        "client": "tw-ob",
-        "total": "1",
-        "idx": "0",
-        "textlen": str(len(chunk)),
+async def _fetch_chunk(
+    client: httpx.AsyncClient,
+    chunk: str,
+    lang_code: str,
+    api_key: str,
+) -> bytes:
+    payload = {
+        "text": chunk,
+        "target_language_code": lang_code,
+        "speaker": _SPEAKER,
+        "model": "bulbul:v3",
+        "pace": 1.0,
+        "speech_sample_rate": 22050,
     }
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)"}
-    resp = await client.get(url, params=params, headers=headers)
+    headers = {
+        "api-subscription-key": api_key,
+        "Content-Type": "application/json",
+    }
+    resp = await client.post(_SARVAM_TTS_URL, json=payload, headers=headers)
     resp.raise_for_status()
-    return resp.content
+    data = resp.json()
+    audios = data.get("audios", [])
+    if not audios:
+        raise ValueError("Sarvam TTS returned no audio data")
+    # API returns base64-encoded WAV
+    return base64.b64decode(audios[0])
 
 
 async def text_to_speech_bytes(text: str, lang: str = "en") -> bytes:
-    """Convert text to speech using Google Translate TTS. Returns MP3 bytes.
-    Splits long text into chunks and concatenates the audio.
-    Raises on failure after 20 seconds total.
+    """Convert text to WAV bytes using Sarvam AI bulbul:v3.
+    Splits long text into chunks and concatenates raw WAV PCM data.
+    Raises on failure.
     """
+    settings = get_settings()
+    api_key = settings.sarvam_api_key
+    lang_code = _LANG_MAP.get(lang, "en-IN")
     chunks = _split_text(text)
-    async with httpx.AsyncClient(timeout=15) as client:
+
+    async with httpx.AsyncClient(timeout=20) as client:
         parts = await asyncio.wait_for(
-            asyncio.gather(*[_fetch_chunk(client, c, lang) for c in chunks]),
-            timeout=20,
+            asyncio.gather(
+                *[_fetch_chunk(client, c, lang_code, api_key) for c in chunks]
+            ),
+            timeout=30,
         )
     return b"".join(parts)
+

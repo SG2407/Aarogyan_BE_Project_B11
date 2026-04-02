@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     groq_api_key: str
     groq_model: str = "llama-3.3-70b-versatile"
 
+    sarvam_api_key: str = ""
+
     qdrant_url: str
     qdrant_api_key: str
     qdrant_collection: str = "medical_rag"

@@ -71,17 +71,16 @@ class _OrbWidgetState extends State<OrbWidget> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 1600),
     )..repeat();
-    _rippleAnim = Tween<double>(begin: 0.7, end: 1.4).animate(
-        CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOut));
-    _rippleOpacity = Tween<double>(begin: 0.6, end: 0.0).animate(
-        CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOut));
+    _rippleAnim = Tween<double>(begin: 0.7, end: 1.4)
+        .animate(CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOut));
+    _rippleOpacity = Tween<double>(begin: 0.6, end: 0.0)
+        .animate(CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOut));
 
     _thinkCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat();
-    _thinkAnim =
-        Tween<double>(begin: 0, end: 2 * math.pi).animate(_thinkCtrl);
+    _thinkAnim = Tween<double>(begin: 0, end: 2 * math.pi).animate(_thinkCtrl);
 
     _speakCtrl = AnimationController(
       vsync: this,
@@ -96,8 +95,7 @@ class _OrbWidgetState extends State<OrbWidget> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _colorAnim =
-        CurvedAnimation(parent: _colorCtrl, curve: Curves.easeInOut);
+    _colorAnim = CurvedAnimation(parent: _colorCtrl, curve: Curves.easeInOut);
   }
 
   @override
@@ -273,8 +271,7 @@ class _OrbWidgetState extends State<OrbWidget> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-              if (isThinking)
-                _buildOrbitDots(sz, colors, _thinkAnim.value),
+              if (isThinking) _buildOrbitDots(sz, colors, _thinkAnim.value),
               // Core orb
               Transform.scale(
                 scale: coreScale,
@@ -325,8 +322,7 @@ class _OrbWidgetState extends State<OrbWidget> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-              if (isSpeaking)
-                _buildWaveform(sz, colors, _speakAnim.value),
+              if (isSpeaking) _buildWaveform(sz, colors, _speakAnim.value),
             ],
           ),
         );
@@ -365,8 +361,7 @@ class _OrbWidgetState extends State<OrbWidget> with TickerProviderStateMixin {
               height: dotSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color:
-                    colors[i % colors.length].withOpacity(0.85),
+                color: colors[i % colors.length].withOpacity(0.85),
                 boxShadow: [
                   BoxShadow(
                     color: colors[i % colors.length].withOpacity(0.5),
@@ -386,11 +381,7 @@ class _OrbWidgetState extends State<OrbWidget> with TickerProviderStateMixin {
     final heights = List.generate(barCount, (i) {
       final phase = i / barCount * math.pi * 2;
       return 0.3 +
-          0.7 *
-              math
-                  .pow(math.sin(phase + pulse * math.pi), 2)
-                  .abs()
-                  .toDouble();
+          0.7 * math.pow(math.sin(phase + pulse * math.pi), 2).abs().toDouble();
     });
 
     return SizedBox(
@@ -408,8 +399,7 @@ class _OrbWidgetState extends State<OrbWidget> with TickerProviderStateMixin {
               borderRadius: BorderRadius.circular(sz * 0.02),
               color: Colors.white.withOpacity(0.75),
               boxShadow: [
-                BoxShadow(
-                    color: colors[0].withOpacity(0.4), blurRadius: 4),
+                BoxShadow(color: colors[0].withOpacity(0.4), blurRadius: 4),
               ],
             ),
           );

@@ -155,7 +155,8 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     if (!_speechInitialised) return;
 
     _partialTranscript = '';
-    _set(state.copyWith(phase: BuddyPhase.listening, error: null, soundLevel: 0.0));
+    _set(state.copyWith(
+        phase: BuddyPhase.listening, error: null, soundLevel: 0.0));
 
     await _speech.listen(
       onResult: _onResult,
@@ -278,7 +279,7 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
   Future<void> _playBase64Audio(String base64Audio) async {
     final bytes = base64Decode(base64Audio);
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/buddy_response.mp3');
+    final file = File('${dir.path}/buddy_response.wav');
     await file.writeAsBytes(bytes);
     await _player.setFilePath(file.path);
     await _player.play();
@@ -329,8 +330,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..forward();
-    _entryFade =
-        CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOut);
+    _entryFade = CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOut);
     _entrySlide = Tween<Offset>(
       begin: const Offset(0, 0.08),
       end: Offset.zero,
@@ -349,8 +349,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     final notifier = ref.read(buddyNotifierProvider.notifier);
     final profileAsync = ref.watch(profileProvider);
     final preferredLang =
-        profileAsync.valueOrNull?['preferred_language'] as String? ??
-            'English';
+        profileAsync.valueOrNull?['preferred_language'] as String? ?? 'English';
 
     final convState = _toConvState(s.phase);
     final displayText = s.lastReply ?? s.lastUserText ?? '';
@@ -387,8 +386,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
                         child: Text(
                           s.error!,
                           style: TextStyle(
-                            color:
-                                const Color(0xFFFF6666).withOpacity(0.9),
+                            color: const Color(0xFFFF6666).withOpacity(0.9),
                             fontSize: 13,
                           ),
                           textAlign: TextAlign.center,
@@ -630,8 +628,7 @@ class _StartButtonState extends State<_StartButton>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _scale,
-      builder: (_, child) =>
-          Transform.scale(scale: _scale.value, child: child),
+      builder: (_, child) => Transform.scale(scale: _scale.value, child: child),
       child: GestureDetector(
         onTap: widget.onTap,
         child: Container(
@@ -717,6 +714,3 @@ class _EndButton extends StatelessWidget {
     );
   }
 }
-
-
-
