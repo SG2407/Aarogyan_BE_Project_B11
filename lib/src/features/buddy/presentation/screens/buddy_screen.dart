@@ -7,11 +7,11 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:math' as math;
-import '../../../../core/theme/app_theme.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../data/buddy_repository.dart';
 import '../../../profile/data/profile_repository.dart';
+import '../widgets/orb_widget.dart';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 enum BuddyPhase { idle, listening, processing, playing }
@@ -294,658 +294,330 @@ final buddyNotifierProvider =
     AutoDisposeNotifierProvider<BuddyNotifier, BuddyStateData>(
         BuddyNotifier.new);
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
-class BuddyScreen extends ConsumerWidget {
-  const BuddyScreen({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(buddyNotifierProvider);
-    final notifier = ref.read(buddyNotifierProvider.notifier);
-    final profileAsync = ref.watch(profileProvider);
-    final preferredLang = profileAsync.valueOrNull?['preferred_language'] as String? ?? 'English';
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(appStr(preferredLang, 'buddy_title')),
-        actions: [
-          if (s.conversationActive)
-            TextButton(
-              onPressed: notifier.endConversation,
-              child: Text(appStr(preferredLang, 'end')),
-            ),
-        ],
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Spacer(),
-              Center(
-                child: _OrbzAvatar(
-                  phase: s.phase,
-                  soundLevel: s.soundLevel,
-                ),
-              ),
-              const SizedBox(height: 28),
-              _PhaseLabel(
-                phase: s.phase,
-                conversationActive: s.conversationActive,
-                lastUserText: s.lastUserText,
-                lastReply: s.lastReply,
-                lang: preferredLang,
-              ),
-              const SizedBox(height: 20),
-              if (s.error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(
-                    s.error!,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: AppColors.error),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              const Spacer(),
-              _BottomControls(
-                phase: s.phase,
-                conversationActive: s.conversationActive,
-                onStart: () => notifier.startConversation(preferredLang: preferredLang),
-                onInterrupt: notifier.interrupt,
-                lang: preferredLang,
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
-      ),
-    );
+// Maps BuddyPhase → ConversationState used by OrbWidget
+ConversationState _toConvState(BuddyPhase phase) {
+  switch (phase) {
+    case BuddyPhase.idle:
+      return ConversationState.idle;
+    case BuddyPhase.listening:
+      return ConversationState.listening;
+    case BuddyPhase.processing:
+      return ConversationState.thinking;
+    case BuddyPhase.playing:
+      return ConversationState.speaking;
   }
 }
 
-// ─── Orbz Avatar ──────────────────────────────────────────────────────────────
-class _OrbzAvatar extends StatefulWidget {
-  final BuddyPhase phase;
-  final double soundLevel;
-  const _OrbzAvatar({required this.phase, this.soundLevel = 0.0});
+// ─── Screen ───────────────────────────────────────────────────────────────────
+class BuddyScreen extends ConsumerStatefulWidget {
+  const BuddyScreen({super.key});
 
   @override
-  State<_OrbzAvatar> createState() => _OrbzAvatarState();
+  ConsumerState<BuddyScreen> createState() => _BuddyScreenState();
 }
 
-class _OrbzAvatarState extends State<_OrbzAvatar>
-    with TickerProviderStateMixin {
-  late final AnimationController _breathCtrl;
-  late final AnimationController _rippleCtrl;
-  late final AnimationController _glowCtrl;
-  late final AnimationController _ringCtrl;
-  late final AnimationController _innerCtrl;
+class _BuddyScreenState extends ConsumerState<BuddyScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _entryCtrl;
+  late Animation<double> _entryFade;
+  late Animation<Offset> _entrySlide;
 
   @override
   void initState() {
     super.initState();
-    _breathCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 3200));
-    _rippleCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1600));
-    _glowCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1100));
-    _ringCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 2800));
-    _innerCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 5000))
-      ..repeat();
-    _syncAnimations(widget.phase);
-  }
-
-  void _syncAnimations(BuddyPhase phase) {
-    _breathCtrl.stop();
-    _rippleCtrl.stop();
-    _glowCtrl.stop();
-    _ringCtrl.stop();
-    switch (phase) {
-      case BuddyPhase.idle:
-        _breathCtrl.repeat(reverse: true);
-        _glowCtrl.repeat(reverse: true);
-        break;
-      case BuddyPhase.listening:
-        _rippleCtrl.repeat();
-        _glowCtrl.repeat(reverse: true);
-        break;
-      case BuddyPhase.processing:
-      case BuddyPhase.playing:
-        _ringCtrl.repeat();
-        _glowCtrl.repeat(reverse: true);
-        break;
-    }
-  }
-
-  @override
-  void didUpdateWidget(_OrbzAvatar old) {
-    super.didUpdateWidget(old);
-    if (old.phase != widget.phase) _syncAnimations(widget.phase);
+    _entryCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..forward();
+    _entryFade =
+        CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOut);
+    _entrySlide = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOut));
   }
 
   @override
   void dispose() {
-    _breathCtrl.dispose();
-    _rippleCtrl.dispose();
-    _glowCtrl.dispose();
-    _ringCtrl.dispose();
-    _innerCtrl.dispose();
+    _entryCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: SizedBox(
-        width: 260,
-        height: 260,
-        child: AnimatedBuilder(
-          animation: Listenable.merge(
-              [_breathCtrl, _rippleCtrl, _glowCtrl, _ringCtrl, _innerCtrl]),
-          builder: (_, __) => CustomPaint(
-            painter: _OrbPainter(
-              phase: widget.phase,
-              breathT: _breathCtrl.value,
-              rippleT: _rippleCtrl.value,
-              glowT: _glowCtrl.value,
-              ringT: _ringCtrl.value,
-              innerT: _innerCtrl.value,
-              soundLevel: widget.soundLevel,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+    final s = ref.watch(buddyNotifierProvider);
+    final notifier = ref.read(buddyNotifierProvider.notifier);
+    final profileAsync = ref.watch(profileProvider);
+    final preferredLang =
+        profileAsync.valueOrNull?['preferred_language'] as String? ??
+            'English';
 
-class _OrbPainter extends CustomPainter {
-  final BuddyPhase phase;
-  final double breathT;
-  final double rippleT;
-  final double glowT;
-  final double ringT;
-  final double innerT;
-  final double soundLevel;
+    final convState = _toConvState(s.phase);
+    final displayText = s.lastReply ?? s.lastUserText ?? '';
 
-  _OrbPainter({
-    required this.phase,
-    required this.breathT,
-    required this.rippleT,
-    required this.glowT,
-    required this.ringT,
-    required this.innerT,
-    this.soundLevel = 0.0,
-  });
-
-  static const _idleColors = [Color(0xFF1DE9B6), Color(0xFF00ACC1)];
-  static const _listenColors = [Color(0xFF76FF03), Color(0xFF1DE9B6)];
-  static const _processColors = [Color(0xFF40C4FF), Color(0xFF5C6BC0)];
-  static const _playColors = [Color(0xFF64FFDA), Color(0xFF2979FF)];
-
-  List<Color> get _clrs {
-    if (phase == BuddyPhase.listening) return _listenColors;
-    if (phase == BuddyPhase.processing) return _processColors;
-    if (phase == BuddyPhase.playing) return _playColors;
-    return _idleColors;
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-    final c = Offset(cx, cy);
-    final baseR = size.width * 0.30;
-    final double scale;
-    if (phase == BuddyPhase.listening) {
-      scale = 1.0 + soundLevel * 0.18;
-    } else if (phase == BuddyPhase.idle) {
-      scale = 1.0 + breathT * 0.08;
-    } else {
-      scale = 1.0;
-    }
-    final r = baseR * scale;
-    final clrs = _clrs;
-
-    _drawOuterAura(canvas, c, r, clrs);
-    if (phase == BuddyPhase.listening) _drawRipples(canvas, c, r, clrs);
-    if (phase == BuddyPhase.playing || phase == BuddyPhase.processing) {
-      _drawEnergyRings(canvas, c, r, clrs);
-    }
-    _drawCoreOrb(canvas, c, r, clrs);
-    _drawHighlight(canvas, c, r);
-    _drawEdgeGlow(canvas, c, r, clrs);
-  }
-
-  void _drawOuterAura(Canvas canvas, Offset c, double r, List<Color> clrs) {
-    final auraR = r * 2.1;
-    final alpha =
-        phase == BuddyPhase.idle ? 0.07 + breathT * 0.05 : 0.12 + glowT * 0.08;
-    canvas.drawCircle(
-      c,
-      auraR,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          clrs[0].withValues(alpha: alpha),
-          clrs[1].withValues(alpha: alpha * 0.3),
-          clrs[1].withValues(alpha: 0),
-        ], stops: const [
-          0.0,
-          0.55,
-          1.0
-        ]).createShader(Rect.fromCircle(center: c, radius: auraR)),
-    );
-  }
-
-  void _drawRipples(Canvas canvas, Offset c, double r, List<Color> clrs) {
-    for (int i = 0; i < 4; i++) {
-      final t = (rippleT + i * 0.25) % 1.0;
-      final rR = r * (1.08 + t * 1.9);
-      final a = (1.0 - t) * 0.55;
-      if (a < 0.01) continue;
-      canvas.drawCircle(
-        c,
-        rR,
-        Paint()
-          ..color = clrs[0].withValues(alpha: a)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5 * (1.0 - t),
-      );
-    }
-  }
-
-  void _drawEnergyRings(Canvas canvas, Offset c, double r, List<Color> clrs) {
-    final ringR = r * 1.42;
-    final start = ringT * math.pi * 2;
-    // Outer soft glow arc
-    canvas.drawArc(
-      Rect.fromCircle(center: c, radius: ringR),
-      start,
-      math.pi * 1.6,
-      false,
-      Paint()
-        ..color = clrs[0].withValues(alpha: 0.18)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 12
-        ..strokeCap = StrokeCap.round
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-    );
-    // Bright leading arc
-    canvas.drawArc(
-      Rect.fromCircle(center: c, radius: ringR),
-      start,
-      math.pi * 1.6,
-      false,
-      Paint()
-        ..color = clrs[0].withValues(alpha: 0.9)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5
-        ..strokeCap = StrokeCap.round,
-    );
-    // Counter-rotating inner arc
-    canvas.drawArc(
-      Rect.fromCircle(center: c, radius: r * 1.22),
-      -start * 0.65,
-      math.pi * 0.85,
-      false,
-      Paint()
-        ..color = clrs[1].withValues(alpha: 0.55)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.8
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  void _drawCoreOrb(Canvas canvas, Offset c, double r, List<Color> clrs) {
-    // Fluid internal gradient that slowly orbits
-    final gx = math.cos(innerT * math.pi * 2) * 0.28;
-    final gy = math.sin(innerT * math.pi * 2) * 0.28;
-    canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..shader = RadialGradient(
-          center: Alignment(gx, gy),
-          colors: [
-            Colors.white.withValues(alpha: 0.95),
-            clrs[0],
-            clrs[1],
-          ],
-          stops: const [0.0, 0.42, 1.0],
-        ).createShader(Rect.fromCircle(center: c, radius: r)),
-    );
-    // Fluid boundary ring when listening
-    if (phase == BuddyPhase.listening) {
-      canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..color = clrs[0].withValues(alpha: 0.2 + glowT * 0.15)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 5
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-      );
-    }
-  }
-
-  void _drawHighlight(Canvas canvas, Offset c, double r) {
-    final h = Offset(c.dx - r * 0.27, c.dy - r * 0.27);
-    canvas.drawCircle(
-      h,
-      r * 0.30,
-      Paint()
-        ..shader = RadialGradient(colors: [
-          Colors.white.withValues(alpha: 0.7),
-          Colors.white.withValues(alpha: 0.0),
-        ]).createShader(Rect.fromCircle(center: h, radius: r * 0.30)),
-    );
-  }
-
-  void _drawEdgeGlow(Canvas canvas, Offset c, double r, List<Color> clrs) {
-    canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..color = clrs[0].withValues(alpha: 0.40 + glowT * 0.20)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.5
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_OrbPainter old) => true;
-}
-
-// ─── Phase label ──────────────────────────────────────────────────────────────
-class _PhaseLabel extends StatelessWidget {
-  final BuddyPhase phase;
-  final bool conversationActive;
-  final String? lastUserText;
-  final String? lastReply;
-  final String lang;
-
-  const _PhaseLabel({
-    required this.phase,
-    required this.conversationActive,
-    required this.lang,
-    this.lastUserText,
-    this.lastReply,
-  });
-
-  String _headline() {
-    if (!conversationActive) return appStr(lang, 'tap_to_begin');
-    switch (phase) {
-      case BuddyPhase.idle:
-        return appStr(lang, 'starting');
-      case BuddyPhase.listening:
-        return appStr(lang, 'listening');
-      case BuddyPhase.processing:
-        return appStr(lang, 'thinking');
-      case BuddyPhase.playing:
-        return appStr(lang, 'speaking');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final caption = phase == BuddyPhase.listening
-        ? appStr(lang, 'speak_freely')
-        : phase == BuddyPhase.playing
-            ? appStr(lang, 'tap_to_interrupt_caption')
-            : null;
-
-    return Column(
-      children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          child: Text(
-            _headline(),
-            key: ValueKey(_headline()),
-            style: Theme.of(context)
-                .textTheme
-                .headlineSmall
-                ?.copyWith(color: AppColors.primary),
-            textAlign: TextAlign.center,
-          ),
-        ),
-        if (caption != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            caption,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.55),
-                ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-        if (lastUserText != null && conversationActive) ...[
-          const SizedBox(height: 16),
-          _TranscriptChip(userText: lastUserText!, reply: lastReply),
-        ],
-      ],
-    );
-  }
-}
-
-class _TranscriptChip extends StatelessWidget {
-  final String userText;
-  final String? reply;
-  const _TranscriptChip({required this.userText, this.reply});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Scaffold(
+      backgroundColor: const Color(0xFF071412),
+      body: FadeTransition(
+        opacity: _entryFade,
+        child: SlideTransition(
+          position: _entrySlide,
+          child: Stack(
             children: [
-              const Icon(Icons.person_rounded,
-                  size: 14, color: AppColors.primary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  userText,
-                  style: Theme.of(context).textTheme.bodySmall,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              _AnimatedBackground(state: convState),
+              SafeArea(
+                child: Column(
+                  children: [
+                    _buildTopBar(context),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _StateLabel(state: convState),
+                          const SizedBox(height: 20),
+                          OrbWidget(state: convState, size: 200),
+                          const SizedBox(height: 20),
+                          _DisplayText(text: displayText),
+                        ],
+                      ),
+                    ),
+                    if (s.error != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 8),
+                        child: Text(
+                          s.error!,
+                          style: TextStyle(
+                            color:
+                                const Color(0xFFFF6666).withOpacity(0.9),
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    _BuddyBottomControls(
+                      isActive: s.conversationActive,
+                      onStart: () => notifier.startConversation(
+                          preferredLang: preferredLang),
+                      onEnd: notifier.endConversation,
+                      lang: preferredLang,
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          if (reply != null && reply!.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.auto_awesome_rounded,
-                    size: 14, color: Color(0xFF1DE9B6)),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    reply!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.7),
-                        ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Center(
+        child: Column(
+          children: [
+            const Text(
+              'Buddy',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              'Your Emotional Companion',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.45),
+                fontSize: 11,
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Animated background gradient ─────────────────────────────────────────────
+class _AnimatedBackground extends StatelessWidget {
+  final ConversationState state;
+  const _AnimatedBackground({required this.state});
+
+  Color _bgColorFor(ConversationState s) {
+    switch (s) {
+      case ConversationState.idle:
+        return AppColors.primary;
+      case ConversationState.listening:
+        return const Color(0xFF00D2A0);
+      case ConversationState.processing:
+        return const Color(0xFFFF6B6B);
+      case ConversationState.thinking:
+        return const Color(0xFFFF4499);
+      case ConversationState.speaking:
+        return const Color(0xFF4ECDC4);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _bgColorFor(state);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 700),
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: const Alignment(0, -0.2),
+          radius: 1.4,
+          colors: [color.withOpacity(0.22), const Color(0xFF071412)],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── State label above orb ─────────────────────────────────────────────────────
+class _StateLabel extends StatelessWidget {
+  final ConversationState state;
+  const _StateLabel({required this.state});
+
+  String get _label {
+    switch (state) {
+      case ConversationState.idle:
+        return 'Tap to start';
+      case ConversationState.listening:
+        return 'Listening...';
+      case ConversationState.processing:
+        return 'Processing...';
+      case ConversationState.thinking:
+        return 'Buddy is thinking...';
+      case ConversationState.speaking:
+        return 'Buddy is speaking...';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 400),
+      transitionBuilder: (child, anim) =>
+          FadeTransition(opacity: anim, child: child),
+      child: Text(
+        _label,
+        key: ValueKey(_label),
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.6),
+          fontSize: 15,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Display text bubble ───────────────────────────────────────────────────────
+class _DisplayText extends StatelessWidget {
+  final String text;
+  const _DisplayText({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 500),
+        transitionBuilder: (child, anim) =>
+            FadeTransition(opacity: anim, child: child),
+        child: text.isEmpty
+            ? const SizedBox.shrink()
+            : Container(
+                key: ValueKey(text),
+                constraints: const BoxConstraints(maxHeight: 120),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.07),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.1),
+                    width: 1,
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    text,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      height: 1.55,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+// ─── Bottom controls ───────────────────────────────────────────────────────────
+class _BuddyBottomControls extends StatelessWidget {
+  final bool isActive;
+  final VoidCallback onStart;
+  final VoidCallback onEnd;
+  final String lang;
+
+  const _BuddyBottomControls({
+    required this.isActive,
+    required this.onStart,
+    required this.onEnd,
+    required this.lang,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      child: Column(
+        children: [
+          if (!isActive)
+            _StartButton(onTap: onStart, lang: lang)
+          else
+            _EndButton(onTap: onEnd, lang: lang),
         ],
       ),
     );
   }
 }
 
-// ─── Bottom controls ──────────────────────────────────────────────────────────
-class _BottomControls extends StatelessWidget {
-  final BuddyPhase phase;
-  final bool conversationActive;
-  final VoidCallback onStart;
-  final VoidCallback onInterrupt;
+// ─── Start button with pulse animation ────────────────────────────────────────
+class _StartButton extends StatefulWidget {
+  final VoidCallback onTap;
   final String lang;
-
-  const _BottomControls({
-    required this.phase,
-    required this.conversationActive,
-    required this.onStart,
-    required this.onInterrupt,
-    required this.lang,
-  });
+  const _StartButton({required this.onTap, required this.lang});
 
   @override
-  Widget build(BuildContext context) {
-    // ── Not started ──
-    if (!conversationActive) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          ElevatedButton.icon(
-            onPressed: onStart,
-            icon: const Icon(Icons.favorite_rounded),
-            label: Text(appStr(lang, 'start_conversation')),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(32)),
-              textStyle:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            appStr(lang, 'one_tap_hint'),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.5),
-                ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      );
-    }
-
-    // ── Listening — no button, show animated sound-wave indicator ──
-    if (phase == BuddyPhase.listening) {
-      return Column(
-        children: [
-          const _SoundWaveIndicator(),
-          const SizedBox(height: 8),
-          Text(
-            appStr(lang, 'pause_hint'),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.4),
-                ),
-          ),
-        ],
-      );
-    }
-
-    // ── Playing — interrupt button ──
-    if (phase == BuddyPhase.playing) {
-      return Column(
-        children: [
-          GestureDetector(
-            onTap: onInterrupt,
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.error, width: 2),
-              ),
-              child: const Icon(Icons.mic_rounded,
-                  color: AppColors.error, size: 28),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            appStr(lang, 'tap_interrupt'),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.4),
-                ),
-          ),
-        ],
-      );
-    }
-
-    // ── Processing / idle spinner ──
-    return Column(
-      children: [
-        const SizedBox(
-          width: 32,
-          height: 32,
-          child: CircularProgressIndicator(strokeWidth: 2.5),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Please wait…',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.4),
-              ),
-        ),
-      ],
-    );
-  }
+  State<_StartButton> createState() => _StartButtonState();
 }
 
-// ─── Animated sound-wave indicator shown while listening ──────────────────────
-class _SoundWaveIndicator extends StatefulWidget {
-  const _SoundWaveIndicator();
-
-  @override
-  State<_SoundWaveIndicator> createState() => _SoundWaveIndicatorState();
-}
-
-class _SoundWaveIndicatorState extends State<_SoundWaveIndicator>
+class _StartButtonState extends State<_StartButton>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat();
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(begin: 1.0, end: 1.06).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOutSine),
+    );
   }
 
   @override
@@ -957,25 +629,94 @@ class _SoundWaveIndicatorState extends State<_SoundWaveIndicator>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (_, __) {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(5, (i) {
-            final t = (_ctrl.value + i * 0.2) % 1.0;
-            final h = 6.0 + 18.0 * math.sin(t * math.pi);
-            return Container(
-              width: 4,
-              height: h,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(2),
+      animation: _scale,
+      builder: (_, child) =>
+          Transform.scale(scale: _scale.value, child: child),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          width: double.infinity,
+          height: 64,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppColors.primary, const Color(0xFF2DA882)],
+            ),
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.50),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
               ),
-            );
-          }),
-        );
-      },
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.mic_rounded, color: Colors.white, size: 24),
+              const SizedBox(width: 12),
+              Text(
+                appStr(widget.lang, 'start_conversation'),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
+
+// ─── End button ────────────────────────────────────────────────────────────────
+class _EndButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final String lang;
+  const _EndButton({required this.onTap, required this.lang});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 64,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(
+            color: const Color(0xFFFF4444).withOpacity(0.6),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.stop_circle_outlined,
+              color: const Color(0xFFFF6666).withOpacity(0.9),
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              appStr(lang, 'end'),
+              style: TextStyle(
+                color: const Color(0xFFFF8888).withOpacity(0.9),
+                fontSize: 17,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+
