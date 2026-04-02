@@ -1,0 +1,1476 @@
+================================================================================
+  EMOTION DETECTION SERVICE — STANDALONE IMPLEMENTATION REFERENCE
+  Extracted from: Arogan Emotional Buddy (Conversation_agent_buddy project)
+================================================================================
+
+⚠️  IMPORTANT NOTICE FOR COPILOT / IMPLEMENTER
+    - DO NOT copy the UI/frontend (Streamlit app.py, orb animations, chat widget)
+    - DO NOT copy the conversational pipeline (ConversationEngine, TTSEngine,
+      conversation_engine.py, tts_engine.py, audio_capture.py)
+    - ONLY implement the emotion detection logic described in this file.
+    - This service is designed to be self-contained and framework-agnostic.
+    - You can plug this into Flask, FastAPI, Django, or any other backend.
+
+🎯  TARGET EMOTION LABELS (4 only):
+    This implementation uses EXACTLY 4 emotion labels:
+      1. happy
+      2. sad
+      3. angry
+      4. neutral
+    DO NOT add anxious or frustrated. All model outputs map into these 4 labels.
+    The audio model (Wav2Vec2) natively outputs these same 4 labels — perfect alignment.
+
+================================================================================
+  DEPENDENCIES  (pip install these)
+================================================================================
+
+transformers        # HuggingFace pipelines (text + audio classifiers)
+torch               # PyTorch backend for transformer inference
+soundfile           # WAV loading — replaces ffmpeg, zero system dependency
+librosa             # Acoustic feature extraction (pitch, energy, speech rate)
+numpy               # Array math
+
+# Minimal requirements.txt:
+transformers
+torch
+soundfile
+librosa
+numpy
+
+================================================================================
+  ARCHITECTURE OVERVIEW
+================================================================================
+
+  The emotion detection system has 4 layers:
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  Layer 1: schema.py  — TypedDict data structures            │
+  │  ↓                                                          │
+  │  Layer 2: emotion_extraction.py  — ML model wrappers        │
+  │     ├── Text emotion  (j-hartmann/emotion-english-distilroberta-base) │
+  │     ├── Audio emotion (superb/wav2vec2-base-superb-er)      │
+  │     └── Acoustic features (librosa: energy, pitch, rate)   │
+  │  ↓                                                          │
+  │  Layer 3: fusion_engine.py  — Conflict resolution (no ML)  │
+  │     Deterministically merges text+audio signals             │
+  │  ↓                                                          │
+  │  Layer 4: session_analytics.py  — Session-level aggregation │
+  │     Pure statistics — dominant emotion, trend, volatility    │
+  └─────────────────────────────────────────────────────────────┘
+
+  FLOW per utterance:
+  audio_file + transcript_text
+       │
+       ├─► EmotionExtractor.extract_text_emotion(text)    → text_probs
+       ├─► EmotionExtractor.extract_audio_emotion(path)   → audio_probs
+       ├─► EmotionExtractor.extract_acoustic_features(path) → feat dict
+       │
+       └─► FusionEngine.fuse(text, text_probs, audio_probs, feat)
+               → (final_emotion_probs, confidence_scores)
+
+  FLOW after all utterances collected:
+  list[UtteranceSegment]  →  analyze_session()  →  SessionAnalytics
+
+
+================================================================================
+  FILE 1: schema.py
+  PURPOSE: Central data-type definitions — import this everywhere.
+           Uses TypedDict for zero-overhead typing (no Pydantic needed).
+================================================================================
+
+"""
+schema.py - Strict data structures for all session data.
+Uses TypedDict for zero-overhead compatibility without Pydantic import at startup.
+"""
+from typing import TypedDict, List, Dict, Optional
+
+
+class EmotionProbs(TypedDict):
+    """Probability distribution across 4 emotion labels.
+    All values are floats in [0.0, 1.0] and sum to 1.0.
+    Only 4 labels used: happy, sad, angry, neutral.
+    """
+    happy: float
+    sad: float
+    angry: float
+    neutral: float
+
+
+class ConfidenceScores(TypedDict):
+    """Confidence of individual modality classifiers and the final fused output."""
+    text: float   # confidence of the text model's dominant prediction
+    audio: float  # confidence of the audio model's dominant prediction
+    final: float  # confidence after fusion
+
+
+class UtteranceSegment(TypedDict):
+    """One user utterance — the core unit of emotion analysis."""
+    segment_id: str               # unique ID, e.g. uuid hex
+    start_time: float             # UNIX timestamp when speech started
+    end_time: float               # UNIX timestamp when speech ended
+    text: str                     # transcript of the utterance
+    audio_path: str               # absolute/relative path to saved WAV file
+    text_emotion_probs: EmotionProbs   # filled in by EmotionExtractor
+    audio_emotion_probs: EmotionProbs  # filled in by EmotionExtractor
+    final_emotion_probs: EmotionProbs  # filled in by FusionEngine
+    confidence_scores: ConfidenceScores  # filled in by FusionEngine
+
+
+class EmotionTrend(TypedDict):
+    """Emotion probabilities averaged over 3 temporal phases of a session."""
+    start: EmotionProbs
+    middle: EmotionProbs
+    end: EmotionProbs
+
+
+class SessionAnalytics(TypedDict):
+    """Aggregated emotional intelligence report for a full session."""
+    dominant_emotion: str              # e.g. "happy", "sad", or "mixed"
+    emotion_distribution: Dict[str, float]  # avg probability per label
+    emotional_trend: EmotionTrend      # start/middle/end phase averages
+    volatility: int                    # number of emotion label changes
+    stability_score: float             # 0–100 (100 = perfectly stable)
+    intensity_trend: List[float]       # dominant emotion confidence per utterance
+    upward_transitions: int            # count of positive valence shifts
+    downward_transitions: int          # count of negative valence shifts
+    insight_summary: str               # human-readable summary sentence
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def empty_emotion_probs() -> EmotionProbs:
+    """Default emotion state: fully neutral."""
+    return {"happy": 0.0, "sad": 0.0, "angry": 0.0, "neutral": 1.0}
+
+
+def empty_confidence() -> ConfidenceScores:
+    return {"text": 0.0, "audio": 0.0, "final": 0.0}
+
+
+def make_utterance(segment_id: str, start: float, end: float,
+                   text: str, audio_path: str) -> UtteranceSegment:
+    """Factory: creates a fresh UtteranceSegment with all emotion fields at defaults."""
+    return {
+        "segment_id": segment_id,
+        "start_time": start,
+        "end_time": end,
+        "text": text,
+        "audio_path": audio_path,
+        "text_emotion_probs": empty_emotion_probs(),
+        "audio_emotion_probs": empty_emotion_probs(),
+        "final_emotion_probs": empty_emotion_probs(),
+        "confidence_scores": empty_confidence(),
+    }
+
+
+================================================================================
+  FILE 2: emotion_extraction.py
+  PURPOSE: ML wrapper for text + audio emotion classification.
+           LAZY LOADED — only import/instantiate AFTER you have audio files.
+           This avoids slow model loading at application startup.
+           Uses soundfile (not ffmpeg) for WAV loading.
+================================================================================
+
+"""
+emotion_extraction.py - Post-session emotion extraction. LAZY LOADED.
+
+Only imported AFTER the session ends, not at app startup.
+
+Text:  j-hartmann/emotion-english-distilroberta-base
+Audio: superb/wav2vec2-base-superb-er  (fully trained, no ffmpeg needed)
+"""
+from __future__ import annotations
+import soundfile as sf
+import numpy as np
+from schema import EmotionProbs, empty_emotion_probs
+
+# ── Standardised 6-label space ────────────────────────────────────────────────
+# 4 target emotion labels — matches Wav2Vec2 audio model output exactly
+STANDARD_LABELS = ["happy", "sad", "angry", "neutral"]
+
+# maps any raw model label → one of the 4 standard labels
+# Note: fear/anxious → sad (closest negative valence)
+#       disgust/frustrated → angry (closest negative valence)
+LABEL_MAP: dict[str, str] = {
+    # positive
+    "joy": "happy", "happy": "happy", "happiness": "happy", "hap": "happy",
+    "surprise": "happy",
+    # sadness
+    "sadness": "sad", "sad": "sad", "grief": "sad",
+    # fear/anxiety → mapped to sad (both are low-energy negative emotions)
+    "fear": "sad", "anxiety": "sad", "anxious": "sad",
+    # anger
+    "anger": "angry", "angry": "angry", "ang": "angry",
+    # disgust/frustration → mapped to angry (both are high-energy negative emotions)
+    "disgust": "angry", "frustrated": "angry",
+    # neutral
+    "neutral": "neutral", "neu": "neutral",
+}
+
+
+def _normalize(raw_scores: list[dict]) -> EmotionProbs:
+    """Map [{label, score}] → normalised EmotionProbs (sums to 1.0)."""
+    mapped: dict[str, float] = {k: 0.0 for k in STANDARD_LABELS}
+    for item in raw_scores:
+        label = LABEL_MAP.get(item["label"].lower())
+        if label:
+            mapped[label] += float(item["score"])
+    total = sum(mapped.values())
+    if total > 0:
+        mapped = {k: v / total for k, v in mapped.items()}
+    else:
+        mapped["neutral"] = 1.0
+    return mapped  # type: ignore[return-value]
+
+
+class EmotionExtractor:
+    """
+    Lazy-loaded post-session emotion extractor.
+    Only instantiate AFTER the conversation ends.
+
+    Usage:
+        extractor = EmotionExtractor()   # loads models (~30s first time, cached after)
+        text_probs = extractor.extract_text_emotion("I feel really sad today")
+        audio_probs = extractor.extract_audio_emotion("/path/to/utterance.wav")
+        features = extractor.extract_acoustic_features("/path/to/utterance.wav")
+    """
+
+    def __init__(self):
+        from transformers import pipeline as hf_pipeline  # lazy import
+
+        print("[Emotion] Loading text classifier…")
+        # top_k=None replaces deprecated return_all_scores=True
+        self._text_clf = hf_pipeline(
+            "text-classification",
+            model="j-hartmann/emotion-english-distilroberta-base",
+            top_k=None,
+            device=-1,   # -1 = CPU; change to 0 for CUDA GPU
+        )
+
+        print("[Emotion] Loading audio classifier…")
+        self._audio_clf = None
+        try:
+            # superb/wav2vec2-base-superb-er: trained SER model (hap/ang/neu/sad)
+            self._audio_clf = hf_pipeline(
+                "audio-classification",
+                model="superb/wav2vec2-base-superb-er",
+                device=-1,
+            )
+        except Exception as e:
+            print(f"[Emotion] Audio classifier unavailable: {e}")
+
+    # ── Text emotion ──────────────────────────────────────────────────────────
+    def extract_text_emotion(self, text: str) -> EmotionProbs:
+        """
+        Classify the emotion from text using DistilRoBERTa fine-tuned on GoEmotions.
+        Returns EmotionProbs with all 6 labels summing to 1.0.
+        Truncates input to 512 tokens automatically.
+        """
+        if not text.strip():
+            return empty_emotion_probs()
+        try:
+            # top_k=None returns list of [{'label':…,'score':…}, …]
+            results = self._text_clf(text[:512])
+            # results is a list of lists
+            scores = results[0] if isinstance(results[0], list) else results
+            return _normalize(scores)
+        except Exception as e:
+            print(f"[Emotion] Text error: {e}")
+            return empty_emotion_probs()
+
+    # ── Audio emotion ─────────────────────────────────────────────────────────
+    def extract_audio_emotion(self, audio_path: str) -> EmotionProbs:
+        """
+        Classify emotion from speech using Wav2Vec2 fine-tuned on SUPERB-ER.
+        Loads WAV with soundfile (no ffmpeg dependency) and feeds numpy array
+        directly to the HuggingFace pipeline.
+        Returns EmotionProbs with all 6 labels summing to 1.0.
+        """
+        import os
+        if not self._audio_clf or not os.path.exists(audio_path):
+            return empty_emotion_probs()
+        try:
+            # Load audio as float32 numpy array — pipeline accepts this directly
+            audio_np, sample_rate = sf.read(audio_path, dtype="float32", always_2d=False)
+            if audio_np.ndim > 1:
+                audio_np = audio_np[:, 0]          # take first channel (mono)
+
+            results = self._audio_clf(
+                {"array": audio_np, "sampling_rate": sample_rate},
+                top_k=None,
+            )
+            return _normalize(results)
+        except Exception as e:
+            print(f"[Emotion] Audio error: {e}")
+            return empty_emotion_probs()
+
+    # ── Acoustic feature extraction ───────────────────────────────────────────
+    def extract_acoustic_features(self, audio_path: str) -> dict:
+        """
+        Extract low-level acoustic features using librosa.
+        These are used by FusionEngine.fuse() to apply heuristic weight boosts.
+
+        Returns dict with 3 keys:
+          - energy       (float): RMS energy of the signal. High = loud/intense.
+          - pitch_variance (float): Variance of the fundamental frequency.
+                          High = animated/expressive speech.
+          - speech_rate  (float): Estimated syllable onsets per second.
+                          High = fast speech, potentially anxious or excited.
+        """
+        import librosa
+        import os
+
+        if not os.path.exists(audio_path):
+            return {"energy": 0.0, "pitch_variance": 0.0, "speech_rate": 0.0}
+        try:
+            y, sr = librosa.load(audio_path, sr=None, mono=True)
+            energy = float(np.sqrt(np.mean(y ** 2)))
+
+            f0, _, _ = librosa.pyin(
+                y,
+                fmin=librosa.note_to_hz("C2"),
+                fmax=librosa.note_to_hz("C7"),
+            )
+            f0_clean = f0[~np.isnan(f0)] if f0 is not None else np.array([])
+            pitch_var = float(np.var(f0_clean)) if len(f0_clean) > 1 else 0.0
+
+            onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+            peaks = librosa.util.peak_pick(
+                onset_env, pre_max=3, post_max=3,
+                pre_avg=3, post_avg=5, delta=0.5, wait=10,
+            )
+            duration = librosa.get_duration(y=y, sr=sr)
+            speech_rate = len(peaks) / duration if duration > 0 else 0.0
+
+            return {"energy": energy, "pitch_variance": pitch_var,
+                    "speech_rate": speech_rate}
+        except Exception as e:
+            print(f"[Emotion] Feature extraction error: {e}")
+            return {"energy": 0.0, "pitch_variance": 0.0, "speech_rate": 0.0}
+
+
+================================================================================
+  FILE 3: fusion_engine.py
+  PURPOSE: Pure-math conflict resolution between text and audio emotion signals.
+           No ML models — only numpy-free arithmetic on EmotionProbs dicts.
+           Merges signals with confidence-aware weights + temporal smoothing.
+================================================================================
+
+"""
+fusion_engine.py - Deterministic multimodal emotion conflict resolution.
+
+Hierarchy:
+  1. Explicit Text Override  (strong emotional keywords in text)
+  2. Acoustic Intensity Override (audio feature heuristics)
+  3. Neutral Conflict Fix  (text=neutral, audio=emotional → trust audio)
+  4. Confidence-Aware Weighted Fusion  (default: w_text=0.6, w_audio=0.4)
+  5. Low Confidence Fallback  (inherit previous if both < threshold)
+  6. Temporal EMA Smoothing  (prevent sudden flips)
+
+All without any ML model imports — pure math.
+"""
+from __future__ import annotations
+from schema import EmotionProbs, ConfidenceScores, empty_emotion_probs
+
+# ── Constants ─────────────────────────────────────────────────────────────────
+DEFAULT_W_TEXT  = 0.6   # default weight for text classifier output
+DEFAULT_W_AUDIO = 0.4   # default weight for audio classifier output
+CONF_HIGH  = 0.70       # confidence threshold to consider a prediction "strong"
+CONF_LOW   = 0.40       # confidence below this = unreliable prediction
+EMA_ALPHA  = 0.65       # weight of current vs previous (higher = more reactive)
+EMA_RESIST = 0.35       # used when flip is weak (resist sudden changes)
+
+# Strong keyword overrides: if any keyword found in text, boost text weight to 85%
+# Only 4 emotion keyword groups — matching the 4 target labels
+STRONG_KEYWORDS: dict[str, list[str]] = {
+    "happy":  ["thrilled", "ecstatic", "overjoyed", "wonderful", "amazing", "great"],
+    "sad":    ["depressed", "devastated", "heartbroken", "hopeless", "miserable",
+               "terrified", "panicking", "dread", "scared", "worried", "nervous"],
+    "angry":  ["furious", "outraged", "livid", "hate", "rage", "infuriated",
+               "fed up", "exhausted", "annoyed", "done with", "sick of"],
+    "neutral": [],
+}
+
+LABELS = list(empty_emotion_probs().keys())
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def dominant(probs: EmotionProbs) -> tuple[str, float]:
+    """Returns (dominant_label, confidence=max_prob)."""
+    label = max(probs, key=probs.get)  # type: ignore[call-overload]
+    return label, probs[label]
+
+
+def weighted_fuse(t: EmotionProbs, a: EmotionProbs,
+                  w_text: float, w_audio: float) -> EmotionProbs:
+    """Linearly combine text and audio emotion dicts, then re-normalize."""
+    fused = {k: w_text * t[k] + w_audio * a[k] for k in LABELS}
+    total = sum(fused.values())
+    if total > 0:
+        fused = {k: v / total for k, v in fused.items()}
+    return fused  # type: ignore[return-value]
+
+
+def ema_smooth(current: EmotionProbs, previous: EmotionProbs, alpha: float) -> EmotionProbs:
+    """
+    Exponential Moving Average smoothing between current and previous emotion probs.
+    alpha=1.0 → pure current result
+    alpha=0.0 → inherit previous entirely
+    """
+    smoothed = {k: alpha * current[k] + (1 - alpha) * previous[k] for k in LABELS}
+    total = sum(smoothed.values())
+    if total > 0:
+        smoothed = {k: v / total for k, v in smoothed.items()}
+    return smoothed  # type: ignore[return-value]
+
+
+# ── Main Fusion Engine ────────────────────────────────────────────────────────
+
+class FusionEngine:
+    """
+    Stateful fusion engine that tracks the previous segment's emotion for smoothing.
+
+    Usage:
+        fusion = FusionEngine()
+        final_probs, confidences = fusion.fuse(
+            text="I feel a bit down today",
+            text_probs=text_emotion_probs,    # from EmotionExtractor
+            audio_probs=audio_emotion_probs,  # from EmotionExtractor
+            acoustic_features=feat,           # from EmotionExtractor
+        )
+        # call fusion.reset() to start a new session
+    """
+
+    def __init__(self):
+        self._prev: EmotionProbs | None = None
+
+    def reset(self):
+        """Clears state between sessions."""
+        self._prev = None
+
+    def fuse(
+        self,
+        text: str,
+        text_probs: EmotionProbs,
+        audio_probs: EmotionProbs,
+        acoustic_features: dict,
+    ) -> tuple[EmotionProbs, ConfidenceScores]:
+        """
+        Run the full conflict resolution pipeline and return
+        (final_emotion_probs, confidence_scores).
+
+        Rules applied IN ORDER:
+          1. If strong keyword found in text  → boost text weight to 85%
+          2. If acoustic intensity signals emotion → boost audio weight to 70%
+          3. If text=neutral but audio=emotional  → boost audio weight to 80%
+          4. Perform confidence-aware weighted fusion
+          5. If both confidence scores are low    → fall back to previous result
+          6. Apply temporal EMA smoothing to prevent sudden label flips
+        """
+        t_label, t_conf = dominant(text_probs)
+        a_label, a_conf = dominant(audio_probs)
+        w_text, w_audio = DEFAULT_W_TEXT, DEFAULT_W_AUDIO
+
+        text_lower = text.lower()
+        energy: float     = acoustic_features.get("energy", 0.0)
+        pitch_var: float  = acoustic_features.get("pitch_variance", 0.0)
+
+        # ── Rule 1: Explicit Text Override ────────────────────────────────────
+        for emotion, keywords in STRONG_KEYWORDS.items():
+            if any(kw in text_lower for kw in keywords):
+                w_text, w_audio = 0.85, 0.15
+                break
+
+        # ── Rule 2: Acoustic Intensity Override ───────────────────────────────
+        if w_text == DEFAULT_W_TEXT:          # only if Rule 1 didn't fire
+            high_energy_speech = energy > 0.05 and pitch_var > 3000
+            low_energy_speech  = energy < 0.008
+            if high_energy_speech and a_label in ("angry", "happy"):
+                w_text, w_audio = 0.30, 0.70
+            elif low_energy_speech and a_label == "sad":
+                w_text, w_audio = 0.30, 0.70
+            elif a_conf - t_conf > 0.30:       # audio is much more confident
+                w_text, w_audio = 0.30, 0.70
+
+        # ── Rule 3: Neutral Conflict Fix ──────────────────────────────────────
+        if t_label == "neutral" and a_label != "neutral" and a_conf > CONF_LOW:
+            w_text, w_audio = 0.20, 0.80
+
+        # ── Confidence-Aware Weighted Fusion ──────────────────────────────────
+        fused = weighted_fuse(text_probs, audio_probs, w_text, w_audio)
+        f_label, f_conf = dominant(fused)
+
+        # ── Rule 4: Low Confidence Fallback ───────────────────────────────────
+        if t_conf < CONF_LOW and a_conf < CONF_LOW:
+            if self._prev is not None:
+                fused = self._prev   # inherit previous label entirely
+            else:
+                fused["neutral"] = fused.get("neutral", 0.0) + 0.3
+                total = sum(fused.values())
+                fused = {k: v / total for k, v in fused.items()}  # type: ignore
+
+        # ── Rule 5 & 6: Temporal Smoothing & Consistency Constraint ──────────
+        if self._prev is not None:
+            p_label, _ = dominant(self._prev)
+            f_label, f_conf = dominant(fused)
+            # If current flip is weak, resist the change more
+            alpha = EMA_ALPHA if (f_label == p_label or f_conf >= CONF_HIGH) else EMA_RESIST
+            fused = ema_smooth(fused, self._prev, alpha)
+
+        self._prev = fused
+
+        final_conf = dominant(fused)[1]
+        confidences: ConfidenceScores = {
+            "text": t_conf,
+            "audio": a_conf,
+            "final": final_conf,
+        }
+        return fused, confidences  # type: ignore[return-value]
+
+
+================================================================================
+  FILE 4: session_analytics.py
+  PURPOSE: Compute session-level emotional intelligence from a list of
+           analyzed UtteranceSegments. No ML — pure statistics.
+================================================================================
+
+"""
+session_analytics.py - Session-level emotion aggregation and insight generation.
+No ML models — pure statistics over the already-computed emotion probs.
+"""
+from __future__ import annotations
+import collections
+from schema import (
+    UtteranceSegment, SessionAnalytics, EmotionTrend,
+    EmotionProbs, empty_emotion_probs,
+)
+
+# Valence used to categorize transitions as "upward" or "downward"
+VALENCE: dict[str, int] = {
+    # 4-label valence scores
+    "happy": 2, "neutral": 0, "sad": -2, "angry": -2,
+}
+
+LABELS = list(empty_emotion_probs().keys())
+
+
+def _avg_probs(segments: list[UtteranceSegment]) -> EmotionProbs:
+    """Average final_emotion_probs across a list of utterance segments."""
+    if not segments:
+        return empty_emotion_probs()
+    agg = {k: 0.0 for k in LABELS}
+    for seg in segments:
+        for k in LABELS:
+            agg[k] += seg["final_emotion_probs"][k]
+    n = len(segments)
+    return {k: v / n for k, v in agg.items()}  # type: ignore[return-value]
+
+
+def _dominant(probs: EmotionProbs) -> str:
+    return max(probs, key=probs.get)  # type: ignore[call-overload]
+
+
+def analyze_session(utterances: list[UtteranceSegment]) -> SessionAnalytics:
+    """
+    Compute all session-level analytics from the list of analyzed utterances.
+    All utterances must already have final_emotion_probs filled in by FusionEngine.
+    Returns a SessionAnalytics TypedDict.
+
+    Usage:
+        analytics = analyze_session(utterances)
+        print(analytics["dominant_emotion"])   # e.g. "sad"
+        print(analytics["stability_score"])    # e.g. 72.5
+        print(analytics["insight_summary"])    # natural language summary
+    """
+    if not utterances:
+        return _empty_analytics()
+
+    N = len(utterances)
+
+    # ── 1. Emotion distribution (weighted avg) ──────────────────────────────
+    distribution = {k: 0.0 for k in LABELS}
+    intensity_trend: list[float] = []
+    emotion_sequence: list[str] = []
+
+    for utt in utterances:
+        fp = utt["final_emotion_probs"]
+        for k in LABELS:
+            distribution[k] += fp[k] / N
+        dom = _dominant(fp)
+        emotion_sequence.append(dom)
+        intensity_trend.append(fp[dom])
+
+    # ── 2. Dominant emotion ─────────────────────────────────────────────────
+    dominant_emotion = _dominant(distribution)
+    # Weak dominance: top emotion < 35% → label as "mixed"
+    if distribution[dominant_emotion] < 0.35:
+        dominant_emotion = "mixed"
+
+    # ── 3. Emotional trend (3 phases) ───────────────────────────────────────
+    chunk = max(1, N // 3)
+    start_segs  = utterances[:chunk]
+    end_segs    = utterances[-chunk:]
+    mid_segs    = utterances[chunk: N - chunk] or start_segs
+
+    trend: EmotionTrend = {
+        "start":  _avg_probs(start_segs),
+        "middle": _avg_probs(mid_segs),
+        "end":    _avg_probs(end_segs),
+    }
+
+    # ── 4 & 9. Volatility + transition tracking ──────────────────────────────
+    volatility = 0
+    upward = 0
+    downward = 0
+
+    for i in range(1, len(emotion_sequence)):
+        prev_e = emotion_sequence[i - 1]
+        curr_e = emotion_sequence[i]
+        if prev_e != curr_e:
+            volatility += 1
+            diff = VALENCE.get(curr_e, 0) - VALENCE.get(prev_e, 0)
+            if diff > 0:
+                upward += 1
+            elif diff < 0:
+                downward += 1
+
+    # ── 5. Stability score (0-100) ───────────────────────────────────────────
+    stability_score = max(0.0, 100.0 * (1.0 - volatility / max(N, 1)))
+
+    # ── 6. Insight generation ────────────────────────────────────────────────
+    start_dom  = _dominant(trend["start"])
+    end_dom    = _dominant(trend["end"])
+    v_start    = VALENCE.get(start_dom, 0)
+    v_end      = VALENCE.get(end_dom, 0)
+
+    if v_end > v_start:
+        insight = (
+            f"You started the session feeling {start_dom} but gradually shifted toward "
+            f"feeling {end_dom}. That's a positive progression — well done for opening up!"
+        )
+    elif v_end < v_start:
+        insight = (
+            f"Your mood shifted from {start_dom} toward {end_dom} as the session progressed. "
+            "It's okay to feel this way. Consider returning for another session soon."
+        )
+    elif volatility > N // 2:
+        insight = (
+            "Your emotional state fluctuated significantly during this session, "
+            "suggesting a mixed or complex emotional state. Take it easy."
+        )
+    elif dominant_emotion in ("happy", "neutral"):
+        insight = "You maintained a predominantly positive and stable mood throughout. Keep it up!"
+    else:
+        insight = (
+            f"Your dominant mood today was {dominant_emotion}. "
+            "Talking about it is a healthy first step."
+        )
+
+    return {
+        "dominant_emotion": dominant_emotion,
+        "emotion_distribution": distribution,
+        "emotional_trend": trend,
+        "volatility": volatility,
+        "stability_score": round(stability_score, 1),
+        "intensity_trend": intensity_trend,
+        "upward_transitions": upward,
+        "downward_transitions": downward,
+        "insight_summary": insight,
+    }
+
+
+def _empty_analytics() -> SessionAnalytics:
+    return {
+        "dominant_emotion": "unknown",
+        "emotion_distribution": {k: 0.0 for k in LABELS},
+        "emotional_trend": {
+            "start":  empty_emotion_probs(),
+            "middle": empty_emotion_probs(),
+            "end":    empty_emotion_probs(),
+        },
+        "volatility": 0,
+        "stability_score": 100.0,
+        "intensity_trend": [],
+        "upward_transitions": 0,
+        "downward_transitions": 0,
+        "insight_summary": "No data to analyze.",
+    }
+
+
+================================================================================
+  INTEGRATION EXAMPLE — How to wire everything together
+  (This is the exact pattern used in app.py's _run_analysis() function)
+================================================================================
+
+import uuid, time
+from schema import make_utterance
+from emotion_extraction import EmotionExtractor
+from fusion_engine import FusionEngine
+from session_analytics import analyze_session
+
+# ── Step 1: Collect utterances during your session ──────────────────────────
+# This is where YOUR application collects audio + transcripts.
+# You handle STT yourself (Whisper, Groq, AssemblyAI, etc.)
+
+utterances = []
+
+# Example: After receiving each audio chunk + transcript from your pipeline:
+def on_utterance_received(audio_bytes: bytes, transcript: str, audio_save_path: str):
+    """Call this each time the user speaks one turn."""
+    # Save audio to disk (required for audio emotion model)
+    with open(audio_save_path, "wb") as f:
+        f.write(audio_bytes)
+
+    utt = make_utterance(
+        segment_id=uuid.uuid4().hex[:8],
+        start=time.time(),
+        end=0.0,          # update when speech ends if you track it
+        text=transcript,
+        audio_path=audio_save_path,
+    )
+    utterances.append(utt)
+
+
+# ── Step 2: After session ends, run emotion analysis ──────────────────────
+# NOTE: Load models AFTER session ends — not at startup (takes ~30s first time)
+
+extractor = EmotionExtractor()    # loads HuggingFace models
+fusion    = FusionEngine()        # pure math, instant
+
+for utt in utterances:
+    # Extract from both modalities
+    text_probs  = extractor.extract_text_emotion(utt["text"])
+    audio_probs = extractor.extract_audio_emotion(utt["audio_path"])
+    features    = extractor.extract_acoustic_features(utt["audio_path"])
+
+    # Fuse: resolve conflicts, apply smoothing
+    final_probs, confidence = fusion.fuse(
+        text=utt["text"],
+        text_probs=text_probs,
+        audio_probs=audio_probs,
+        acoustic_features=features,
+    )
+
+    # Write results back into the utterance
+    utt["text_emotion_probs"]  = text_probs
+    utt["audio_emotion_probs"] = audio_probs
+    utt["final_emotion_probs"] = final_probs
+    utt["confidence_scores"]   = confidence
+
+# ── Step 3: Compute session-level analytics ──────────────────────────────
+analytics = analyze_session(utterances)
+
+# Access results:
+print(analytics["dominant_emotion"])      # e.g. "sad", "happy", "mixed"
+print(analytics["stability_score"])       # float 0-100
+print(analytics["volatility"])            # int: number of emotion label changes
+print(analytics["upward_transitions"])    # int: positive mood shifts
+print(analytics["downward_transitions"])  # int: negative mood shifts
+print(analytics["insight_summary"])       # natural language string
+print(analytics["emotional_trend"])       # {"start": {...}, "middle": {...}, "end": {...}}
+print(analytics["emotion_distribution"])  # {"happy": 0.12, "sad": 0.45, ...}
+print(analytics["intensity_trend"])       # [0.7, 0.6, 0.8, ...] per utterance
+
+
+================================================================================
+  COMPONENT REFERENCE — What does what?
+================================================================================
+
+┌──────────────────────────┬──────────────────────────────────────────────────────┐
+│ Component                │ Role                                                 │
+├──────────────────────────┼──────────────────────────────────────────────────────┤
+│ schema.py                │ All TypedDict data structures for the emotion         │
+│                          │ detection pipeline. Import this in all other files.  │
+│                          │ EmotionProbs, ConfidenceScores, UtteranceSegment,    │
+│                          │ EmotionTrend, SessionAnalytics + helper factories.   │
+├──────────────────────────┼──────────────────────────────────────────────────────┤
+│ emotion_extraction.py    │ ML models wrapper — lazy loaded after session ends.  │
+│                          │                                                      │
+│ EmotionExtractor         │ Main class. Loads two HuggingFace models on init:    │
+│   .extract_text_emotion  │ → Text: j-hartmann/emotion-english-distilroberta-    │
+│                          │   base. Classifies emotion from a transcript string. │
+│   .extract_audio_emotion │ → Audio: superb/wav2vec2-base-superb-er. Classifies  │
+│                          │   emotion from a WAV file using soundfile (no ffmpeg)│
+│   .extract_acoustic      │ → Acoustic: librosa-based energy, pitch variance,    │
+│     _features            │   and speech rate. Used as signals by FusionEngine.  │
+│                          │                                                      │
+│ _normalize()             │ Internal helper: maps raw model label strings to the │
+│                          │ 4 standard labels (happy/sad/angry/neutral)          │
+│                          │ and re-normalizes scores to sum to 1.0.              │
+│                          │                                                      │
+│ LABEL_MAP                │ Dict mapping raw HuggingFace model output labels to  │
+│                          │ the 6 standard emotion labels.                        │
+├──────────────────────────┼──────────────────────────────────────────────────────┤
+│ fusion_engine.py         │ Conflict resolution between text & audio signals.    │
+│                          │ Pure math — no ML. Stateful (tracks previous seg).   │
+│                          │                                                      │
+│ FusionEngine             │ Main class.                                          │
+│   .fuse()                │ Takes text, text_probs, audio_probs, acoustic_feat.  │
+│                          │ Returns (final_emotion_probs, confidence_scores).    │
+│                          │ Applies 6 rules in order (see Rules section below).  │
+│   .reset()               │ Call between sessions to clear EMA state.            │
+│                          │                                                      │
+│ dominant()               │ Helper: returns (label, confidence) for max prob.    │
+│ weighted_fuse()          │ Helper: linear combination of text+audio dicts.      │
+│ ema_smooth()             │ Helper: exponential moving average between current   │
+│                          │ and previous emotion dicts for temporal smoothing.   │
+│                          │                                                      │
+│ STRONG_KEYWORDS          │ Dict of emotion → [keyword list]. If any keyword in  │
+│                          │ the text matches, text weight is boosted to 85%.     │
+│                          │                                                      │
+│ Fusion Rules Summary:    │                                                      │
+│  Rule 1: Text keywords   │ Explicit word override → w_text=0.85, w_audio=0.15  │
+│  Rule 2: Acoustic        │ High energy/low energy → w_text=0.30, w_audio=0.70  │
+│  Rule 3: Neutral fix     │ Text=neutral, audio≠neutral → w_text=0.20           │
+│  Rule 4: Low confidence  │ Both < 0.40 → inherit previous segment's emotion     │
+│  Rule 5: EMA smoothing   │ Blend with previous using alpha=0.65 (or 0.35 for   │
+│                          │ weak flips) to prevent sudden label changes.         │
+├──────────────────────────┼──────────────────────────────────────────────────────┤
+│ session_analytics.py     │ Aggregates per-utterance emotion results into a      │
+│                          │ session-level report. Pure statistics, no ML.        │
+│                          │                                                      │
+│ analyze_session()        │ Main function. Input: list[UtteranceSegment] where   │
+│                          │ final_emotion_probs is already filled. Returns        │
+│                          │ SessionAnalytics TypedDict with:                     │
+│                          │  • dominant_emotion: most frequent emotion or "mixed" │
+│                          │  • emotion_distribution: avg probability per label   │
+│                          │  • emotional_trend: start/middle/end phase averages  │
+│                          │  • volatility: number of emotion label changes       │
+│                          │  • stability_score: 0–100 (100=no changes)          │
+│                          │  • intensity_trend: confidence per utterance (list)  │
+│                          │  • upward_transitions: count of positive shifts      │
+│                          │  • downward_transitions: count of negative shifts    │
+│                          │  • insight_summary: natural language insight string  │
+│                          │                                                      │
+│ VALENCE dict             │ Maps each emotion label to a numeric valence score:  │
+│                          │ happy=+2, neutral=0, sad=-2, angry=-2               │
+│                          │ angry=-2. Used to classify transitions as up/down.   │
+└──────────────────────────┴──────────────────────────────────────────────────────┘
+
+
+================================================================================
+  MODELS USED — First-time download info
+================================================================================
+
+1. j-hartmann/emotion-english-distilroberta-base (Text)
+   • ~330 MB download (cached in ~/.cache/huggingface/ after first run)
+   • DistilRoBERTa fine-tuned on GoEmotions dataset
+   • Output labels: joy, sadness, anger, fear, surprise, disgust, neutral
+   • These are remapped to the 6 standard labels via LABEL_MAP
+
+2. superb/wav2vec2-base-superb-er (Audio)
+   • ~370 MB download (cached in ~/.cache/huggingface/ after first run)
+   • Wav2Vec2 fine-tuned on SUPERB Emotion Recognition benchmark
+   • Output labels: hap, ang, neu, sad
+   • These are remapped to the 6 standard labels via LABEL_MAP
+   • Uses soundfile for WAV loading — no ffmpeg required
+
+Both models run on CPU (device=-1). For GPU, change device=-1 to device=0.
+
+================================================================================
+  ANDROID APP INTEGRATION CONTEXT
+  ⚠️ READ THIS BEFORE IMPLEMENTING IN ANDROID
+================================================================================
+
+The emotion detection ML models (Wav2Vec2, DistilRoBERTa) are Python/PyTorch-based
+and CANNOT run natively on Android. You MUST run this logic on a Python backend
+server and call it from your Android app via HTTP API.
+
+RECOMMENDED ARCHITECTURE FOR ANDROID:
+
+  [Android App]
+       │
+       │  1. User speaks → Android records audio → sends WAV bytes + transcript
+       │     via HTTP POST to your backend
+       │
+       ▼
+  [Python Backend — FastAPI or Flask]
+       │
+       ├── Receives audio file + transcript text
+       ├── Runs EmotionExtractor → FusionEngine → (optional) analyze_session()
+       └── Returns JSON result back to Android
+       │
+       ▼
+  [Android App receives JSON]
+       └── Displays emotion result, charts, insight text in your UI
+
+WHAT ANDROID IS RESPONSIBLE FOR:
+  - Recording user audio (WAV format, 16kHz recommended)
+  - Sending the audio + transcript to your Python backend (Retrofit / OkHttp)
+  - Rendering the emotion results returned as JSON
+
+WHAT THE PYTHON BACKEND IS RESPONSIBLE FOR:
+  - Running all 4 files: schema.py, emotion_extraction.py,
+    fusion_engine.py, session_analytics.py
+  - Returning a JSON response containing EmotionProbs + SessionAnalytics
+
+EXAMPLE FastAPI ENDPOINT (implement this on your Python server):
+
+    from fastapi import FastAPI, UploadFile, Form
+    from fastapi.responses import JSONResponse
+    import uuid, os, shutil
+    from emotion_extraction import EmotionExtractor
+    from fusion_engine import FusionEngine
+
+    app = FastAPI()
+    extractor = None   # lazy loaded on first request
+    fusion = FusionEngine()
+
+    @app.post("/analyze_utterance")
+    async def analyze_utterance(
+        audio: UploadFile,
+        transcript: str = Form(...)
+    ):
+        global extractor
+        if extractor is None:
+            extractor = EmotionExtractor()   # loads once, reused
+
+        # Save uploaded audio to disk
+        audio_path = f"/tmp/{uuid.uuid4().hex}.wav"
+        with open(audio_path, "wb") as f:
+            shutil.copyfileobj(audio.file, f)
+
+        # Run the 3-step extraction
+        text_probs  = extractor.extract_text_emotion(transcript)
+        audio_probs = extractor.extract_audio_emotion(audio_path)
+        features    = extractor.extract_acoustic_features(audio_path)
+
+        # Fuse the signals
+        final_probs, confidence = fusion.fuse(
+            text=transcript,
+            text_probs=text_probs,
+            audio_probs=audio_probs,
+            acoustic_features=features,
+        )
+
+        os.remove(audio_path)   # clean up
+
+        return JSONResponse({
+            "text_emotion":   text_probs,
+            "audio_emotion":  audio_probs,
+            "final_emotion":  final_probs,
+            "confidence":     confidence,
+            "dominant":       max(final_probs, key=final_probs.get),
+        })
+
+    @app.post("/analyze_session")
+    async def analyze_session_endpoint(utterances: list):
+        # Call analyze_session(utterances) and return SessionAnalytics as JSON
+        from session_analytics import analyze_session
+        result = analyze_session(utterances)
+        return JSONResponse(result)
+
+ANDROID RETROFIT CALL EXAMPLE (Kotlin):
+
+    // Multipart POST to send audio + transcript
+    val requestBody = MultipartBody.Builder()
+        .setType(MultipartBody.FORM)
+        .addFormDataPart("transcript", transcriptText)
+        .addFormDataPart("audio", "audio.wav",
+            audioFile.asRequestBody("audio/wav".toMediaType()))
+        .build()
+
+    val request = Request.Builder()
+        .url("http://YOUR_SERVER_IP:8000/analyze_utterance")
+        .post(requestBody)
+        .build()
+
+    // Parse JSON response → extract "dominant", "final_emotion", "confidence"
+
+JSON RESPONSE SHAPE FROM BACKEND:
+
+    {
+      "text_emotion":  {"happy":0.05,"sad":0.76,"angry":0.04,"neutral":0.15},
+      "audio_emotion": {"happy":0.06,"sad":0.60,"angry":0.17,"neutral":0.17},
+      "final_emotion": {"happy":0.05,"sad":0.70,"angry":0.12,"neutral":0.13},
+      "confidence":    {"text":0.71,"audio":0.60,"final":0.63},
+      "dominant":      "sad"
+    }
+
+
+================================================================================
+  COMPLETE LIBRARY & MODEL REFERENCE
+  Every library and model used — with version notes and exact purpose
+================================================================================
+
+─────────────────────────────────────────────────────────────────────────────
+PYTHON LIBRARIES
+─────────────────────────────────────────────────────────────────────────────
+
+1. transformers  (by HuggingFace)
+   pip install transformers
+   Version: >= 4.35.0  (earlier versions use deprecated return_all_scores)
+   Used in: emotion_extraction.py
+   Purpose:
+     - Loads and runs the text emotion classification model via pipeline()
+     - Loads and runs the audio speech emotion recognition model via pipeline()
+     - Handles model downloading, caching, tokenization, and inference
+     - pipeline("text-classification", ...) → processes transcript strings
+     - pipeline("audio-classification", ...) → processes numpy audio arrays
+   NOTE: top_k=None must be used (not return_all_scores which is deprecated)
+
+2. torch  (PyTorch)
+   pip install torch
+   Version: >= 2.0.0
+   Used in: Indirectly by transformers (transformer models run on PyTorch)
+   Purpose:
+     - Backend computation engine for both ML models
+     - Tensor operations, model weights, forward pass
+     - device=-1 forces CPU mode (no GPU required)
+   NOTE: You do NOT directly call torch in your code — transformers uses it internally
+
+3. torchaudio
+   pip install torchaudio
+   Version: >= 2.0.0
+   Used in: Indirectly by the audio pipeline in some environments
+   Purpose:
+     - Audio processing utilities used by the Wav2Vec2 audio pipeline internally
+     - NOT called directly in the code
+
+4. soundfile
+   pip install soundfile
+   Version: >= 0.12.0
+   Used in: emotion_extraction.py → extract_audio_emotion()
+   Purpose:
+     - Reads WAV audio files into numpy float32 arrays
+     - Replaces ffmpeg entirely — NO system-level ffmpeg install needed
+     - sf.read(audio_path, dtype="float32", always_2d=False)
+       returns: (numpy_array, sample_rate)
+     - The numpy array + sample_rate are fed directly to the HuggingFace
+       audio-classification pipeline
+   WHY soundfile not librosa.load() for the model:
+     soundfile is faster and produces the exact format the HF pipeline expects
+
+5. librosa
+   pip install librosa
+   Version: >= 0.10.0
+   Used in: emotion_extraction.py → extract_acoustic_features()
+   Purpose:
+     - librosa.load()           → loads audio as mono float32, any sample rate
+     - numpy sqrt + mean        → RMS energy calculation
+     - librosa.pyin()           → probabilistic YIN pitch (F0) estimation
+     - librosa.note_to_hz()     → converts note names to Hz for pitch range
+     - librosa.onset.onset_strength() → computes onset envelope for speech rate
+     - librosa.util.peak_pick() → finds peaks in onset envelope (syllable count)
+     - librosa.get_duration()   → total audio duration in seconds
+   Extracts 3 acoustic features used by FusionEngine:
+     - energy         → how loud/intense the voice is
+     - pitch_variance → how much the pitch varied (expressive vs flat)
+     - speech_rate    → syllables per second (fast = anxious/excited)
+
+6. numpy
+   pip install numpy
+   Version: >= 1.24.0
+   Used in: emotion_extraction.py (directly)
+   Purpose:
+     - np.sqrt, np.mean → energy calculation
+     - np.isnan, np.var → pitch variance filtering and calculation
+     - Array slicing for mono channel selection
+     - Core data type for audio arrays passed between soundfile → pipeline
+
+─────────────────────────────────────────────────────────────────────────────
+ML MODELS
+─────────────────────────────────────────────────────────────────────────────
+
+MODEL 1 — TEXT EMOTION CLASSIFIER
+  Name:       j-hartmann/emotion-english-distilroberta-base
+  Source:     https://huggingface.co/j-hartmann/emotion-english-distilroberta-base
+  Framework:  HuggingFace Transformers
+  Base model: DistilRoBERTa (distilled version of RoBERTa)
+  Trained on: GoEmotions dataset (27 emotion categories, distilled to 7)
+  Disk size:  ~330 MB (downloaded once, cached at ~/.cache/huggingface/)
+  RAM usage:  ~600 MB when loaded into memory
+  Input:      Plain text string (max 512 tokens, auto-truncated)
+  Output:     List of {label, score} for each emotion
+  Raw labels output by this model:
+    joy, sadness, anger, fear, surprise, disgust, neutral
+  How labels are remapped to 6 standard labels (via LABEL_MAP):
+    joy      → happy
+    sadness  → sad
+    anger    → angry
+    fear     → sad     (closest 4-label match for fear/anxiety)
+    surprise → happy   (merged with joy)
+    disgust  → angry   (closest 4-label match for disgust/frustration)
+    neutral  → neutral
+  Inference time (CPU): ~0.1–0.5s per utterance
+  Pipeline call:
+    pipeline("text-classification", model="j-hartmann/...", top_k=None, device=-1)
+
+MODEL 2 — AUDIO SPEECH EMOTION RECOGNITION
+  Name:       superb/wav2vec2-base-superb-er
+  Source:     https://huggingface.co/superb/wav2vec2-base-superb-er
+  Framework:  HuggingFace Transformers
+  Base model: Wav2Vec2-base (Facebook's self-supervised speech model)
+  Trained on: SUPERB Emotion Recognition benchmark (IEMOCAP dataset)
+  Disk size:  ~370 MB (downloaded once, cached)
+  RAM usage:  ~400 MB when loaded into memory
+  Input:      Dict {"array": numpy_float32_array, "sampling_rate": int}
+              Audio is automatically resampled to 16kHz internally
+  Output:     List of {label, score} for each emotion
+  Raw labels output by this model:
+    hap (happy), ang (angry), neu (neutral), sad (sad)
+    NOTE: The model outputs exactly 4 labels — perfectly matching the 4-label target.
+          They are inferred via the text model and fusion logic.
+  How labels are remapped (via LABEL_MAP):
+    hap → happy
+    ang → angry
+    neu → neutral
+    sad → sad
+  Inference time (CPU): ~1–3s per utterance (depends on audio length)
+  Pipeline call:
+    pipeline("audio-classification", model="superb/wav2vec2-base-superb-er", device=-1)
+
+TOTAL MEMORY USAGE AT ANALYSIS TIME:
+  Text model:   ~600 MB
+  Audio model:  ~400 MB
+  librosa peak: ~50 MB
+  Total:        ~1.0 – 1.1 GB
+  (Models are lazy-loaded — consume 0 RAM during conversation, only at analysis)
+
+BETTER DROP-IN AUDIO MODEL (optional upgrade, 1 line change):
+  Name:       ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition
+  Size:       ~1.2 GB
+  RAM:        ~1.4 GB
+  Labels:     neutral, calm, happy, sad, angry, fearful, disgust, surprised
+  Accuracy:   Noticeably better than superb/wav2vec2-base-superb-er
+  To upgrade: In emotion_extraction.py, change just this one line:
+              model="ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+  All LABEL_MAP remapping still works automatically with no other changes.
+
+
+================================================================================
+  CORE LOGIC EXPLAINED — HOW EMOTION IS DETECTED, STEP BY STEP
+  (Implementation guide for Copilot — implement EXACTLY in this order)
+================================================================================
+
+STEP 0 — SETUP (do this once at server startup or before analysis begins)
+──────────────────────────────────────────────────────────────────────────
+  Create these objects:
+    extractor = EmotionExtractor()   # loads both ML models (~30s first time)
+    fusion    = FusionEngine()       # pure math, instant
+
+  IMPORTANT: Do NOT create EmotionExtractor at app startup if you want 
+  fast startup. Create it lazily on the first analysis request.
+
+STEP 1 — COLLECT UTTERANCES (during conversation)
+──────────────────────────────────────────────────
+  For EACH user-spoken message:
+    a. Save the audio bytes to a WAV file on disk
+       audio_path = "/tmp/utt_<uuid>.wav"
+    b. Get the transcript text (via Whisper/Groq/other STT)
+    c. Create an UtteranceSegment using make_utterance():
+         utt = make_utterance(
+             segment_id = uuid string,
+             start      = time.time(),
+             end        = 0.0,
+             text       = transcript_string,
+             audio_path = audio_path,
+         )
+    d. Append to a list: utterances.append(utt)
+
+  ONLY process USER messages. AI/assistant replies are ignored.
+
+STEP 2 — TEXT EMOTION EXTRACTION (per utterance)
+──────────────────────────────────────────────────
+  Call: text_probs = extractor.extract_text_emotion(utt["text"])
+
+  Internally this does:
+    a. Passes the text string to the DistilRoBERTa text-classification pipeline
+    b. Gets back raw scores like:
+         [{"label":"joy","score":0.04}, {"label":"sadness","score":0.72}, ...]
+    c. Calls _normalize(raw_scores):
+         - Iterates over each {label, score}
+         - Looks up each label in LABEL_MAP to get its standard label
+         - Accumulates scores per standard label
+         - Divides all values by their sum so total = 1.0
+    d. Returns EmotionProbs:
+         {"happy":0.04, "sad":0.72, "angry":0.05, "neutral":0.08,
+         }
+    e. Falls back to empty_emotion_probs() (neutral=1.0) on any error
+
+STEP 3 — AUDIO EMOTION EXTRACTION (per utterance)
+──────────────────────────────────────────────────
+  Call: audio_probs = extractor.extract_audio_emotion(utt["audio_path"])
+
+  Internally this does:
+    a. Reads the WAV file using soundfile:
+         audio_np, sample_rate = sf.read(path, dtype="float32", always_2d=False)
+    b. If stereo, takes only the first channel (mono):
+         audio_np = audio_np[:, 0]
+    c. Passes to Wav2Vec2 audio-classification pipeline:
+         pipeline({"array": audio_np, "sampling_rate": sample_rate}, top_k=None)
+    d. Gets back raw scores like:
+         [{"label":"hap","score":0.08}, {"label":"ang","score":0.15},
+          {"label":"neu","score":0.17}, {"label":"sad","score":0.60}]
+    e. Calls _normalize() — same process as text:
+         hap→happy, ang→angry, neu→neutral, sad→sad
+         Perfect match — model output labels align exactly with the 4 target labels
+    f. Returns EmotionProbs:
+         {"happy":0.08, "sad":0.60, "angry":0.17, "neutral":0.15}
+    g. Falls back to empty_emotion_probs() if file missing or model error
+
+STEP 4 — ACOUSTIC FEATURE EXTRACTION (per utterance)
+──────────────────────────────────────────────────────
+  Call: features = extractor.extract_acoustic_features(utt["audio_path"])
+
+  Internally this does:
+    a. Loads audio with librosa (independent of soundfile):
+         y, sr = librosa.load(audio_path, sr=None, mono=True)
+    b. Computes RMS ENERGY:
+         energy = sqrt(mean(y²))
+         → Measures how loud/intense the voice is
+         → High energy (>0.05) = shouting, excited, angry
+         → Low energy (<0.008) = quiet, whispering, sad/flat
+    c. Computes PITCH VARIANCE using probabilistic YIN (pyin):
+         f0, _, _ = librosa.pyin(y, fmin=Hz(C2), fmax=Hz(C7))
+         → Extracts the fundamental frequency per frame
+         → Removes NaN frames (unvoiced silence)
+         → pitch_variance = var(f0_clean)
+         → High variance = expressive, animated speech
+         → Low variance = monotone, flat emotional state
+    d. Computes SPEECH RATE via onset detection:
+         onset_env = onset_strength(y, sr)
+         peaks = peak_pick(onset_env, ...)  → each peak ≈ one syllable
+         speech_rate = len(peaks) / duration
+         → High rate (>5/s) = fast, nervous, excited
+         → Low rate (<2/s) = slow, depressed, flat
+    e. Returns:
+         {"energy": 0.032, "pitch_variance": 4200.0, "speech_rate": 3.8}
+    f. Returns zeros on any error
+
+STEP 5 — FUSION ENGINE (per utterance)
+────────────────────────────────────────
+  Call: final_probs, confidence = fusion.fuse(text, text_probs, audio_probs, features)
+
+  The FusionEngine is stateful — it remembers the PREVIOUS utterance's result
+  across calls (for temporal smoothing). Reset with fusion.reset() between sessions.
+
+  Internally it runs these 6 rules IN ORDER:
+
+  RULE 1 — Strong Keyword Text Override:
+    Check text for explicit strong emotional words (e.g. "furious", "heartbroken").
+    If found: w_text=0.85, w_audio=0.15
+    Rationale: Explicit language is direct evidence. Trust it heavily.
+
+  RULE 2 — Acoustic Intensity Override (only if Rule 1 didn't fire):
+    Check acoustic features:
+    - If energy>0.05 AND pitch_var>3000 AND audio says angry/happy:
+        w_text=0.30, w_audio=0.70
+    - If energy<0.008 AND audio says sad:
+        w_text=0.30, w_audio=0.70
+    - If audio confidence is 0.30+ higher than text confidence:
+        w_text=0.30, w_audio=0.70
+    Rationale: Physical voice properties (loudness, pitch) don't lie as easily
+               as words. When they strongly match the audio model, trust audio.
+
+  RULE 3 — Neutral Conflict Fix:
+    If text says "neutral" but audio says something emotional with conf>0.40:
+        w_text=0.20, w_audio=0.80
+    Rationale: People often say "I'm fine" while their voice shows distress.
+               The audio is more honest than the words in this case.
+
+  RULE 4 — Confidence-Aware Weighted Fusion:
+    fused[emotion] = w_text × text_probs[emotion] + w_audio × audio_probs[emotion]
+    Normalize so all values sum to 1.0.
+    Default weights: w_text=0.60, w_audio=0.40
+
+  RULE 5 — Low Confidence Fallback:
+    If BOTH text_conf<0.40 AND audio_conf<0.40 (both models are uncertain):
+    - If there's a previous result: use that (inherit last known emotion)
+    - If no previous: push neutral probability up by 0.3 then re-normalize
+    Rationale: When models can't decide, don't guess wildly — stay near last known state.
+
+  RULE 6 — Temporal EMA Smoothing:
+    If there's a previous segment result:
+    - If current emotion == previous emotion OR current confidence >= 0.70:
+        alpha = 0.65  (more reactive — current gets higher weight)
+    - Else (label flip with low confidence):
+        alpha = 0.35  (resist the change — previous gets higher weight)
+    smoothed[emotion] = alpha × fused[emotion] + (1-alpha) × previous[emotion]
+    Normalize to sum to 1.0.
+    Rationale: Human emotions don't flip every 10 seconds. If both models
+               suddenly say "happy" after "sad", it could be noise. Smooth it.
+
+  Returns:
+    final_probs  → EmotionProbs (the smoothed, fused result)
+    confidence   → ConfidenceScores: {"text": t_conf, "audio": a_conf, "final": f_conf}
+
+  Write results back into the utterance:
+    utt["text_emotion_probs"]  = text_probs
+    utt["audio_emotion_probs"] = audio_probs
+    utt["final_emotion_probs"] = final_probs
+    utt["confidence_scores"]   = confidence
+
+STEP 6 — SESSION ANALYTICS (after ALL utterances are processed)
+────────────────────────────────────────────────────────────────
+  Call: analytics = analyze_session(utterances)
+
+  Internally computes:
+    a. EMOTION DISTRIBUTION: averages final_emotion_probs across all utterances
+       → {"happy":0.12, "sad":0.45, "angry":0.18, ...}
+    b. DOMINANT EMOTION: label with highest average probability
+       → If top label < 35% probability, label as "mixed" instead
+    c. EMOTIONAL TREND: splits session into 3 equal time chunks (start/middle/end)
+       → Averages emotion probs within each chunk
+       → Shows how mood evolved across the session
+    d. VOLATILITY: count of consecutive utterances where dominant label changed
+       → e.g. sad→angry→neutral = 2 changes = volatility of 2
+    e. STABILITY SCORE: 100 × (1 - volatility/N)
+       → 100 = completely stable mood, 0 = changed every turn
+    f. INTENSITY TREND: list of dominant emotion confidence per utterance
+       → [0.71, 0.45, 0.38, 0.36] — useful for a line chart
+    g. VALENCE TRANSITIONS: uses VALENCE dict:
+         happy=+2, neutral=0, sad=-2, angry=-2   (4 labels only)
+       → Counts "upward" transitions (valence improves) and "downward" transitions
+    h. INSIGHT SUMMARY: generates a natural language sentence:
+       - If mood improved from start→end: positive message
+       - If mood declined: supportive message
+       - If very volatile: acknowledgment of complexity
+       - If stable positive: "you did great"
+       - Else: empathetic acknowledgment of dominant mood
+
+  Returns SessionAnalytics with all 9 fields filled.
+
+
+================================================================================
+  THEORY — HOW IS THE OVERALL EMOTION IDENTIFIED?
+  (Read this to understand the conceptual foundation)
+================================================================================
+
+The system is built on one fundamental insight:
+
+  "What a person SAYS and HOW they SOUND often tell different stories.
+   Reliable emotion detection requires listening to both — then deciding
+   which to believe MORE based on the context."
+
+────────────────────────────────────────────────────────────────────────────────
+SIGNAL 1: TEXT (what the words mean)
+────────────────────────────────────────────────────────────────────────────────
+Text carries SEMANTIC emotion — the intended meaning of words.
+
+The DistilRoBERTa model was trained on thousands of human-written sentences
+labeled with emotions. It learned patterns like:
+  "nothing works out"     → sadness
+  "I'm so fed up"         → frustration/anger
+  "I feel amazing today"  → joy
+
+Strength: Very good at detecting emotions that people explicitly state.
+Weakness: People often say "I'm fine" when they're not. Text can be
+          deliberately neutral/guarded even when the person is distressed.
+
+────────────────────────────────────────────────────────────────────────────────
+SIGNAL 2: AUDIO (how the voice sounds)
+────────────────────────────────────────────────────────────────────────────────
+Audio captures PARALINGUISTIC emotion — the emotion in the voice itself,
+independent of words. This is what humans do naturally: you can tell someone
+is upset just by their tone, even on the phone in a foreign language.
+
+The Wav2Vec2 model was pre-trained on massive amounts of speech (self-supervised)
+and then fine-tuned to classify emotions from acoustic patterns. It learned:
+  Slow, low-energy, monotone voice → sadness
+  High-pitched, fast, loud voice   → anger or happiness
+  Flat, even, measured voice       → neutral
+
+Strength: Cannot be faked as easily as words. Captures involuntary vocal cues.
+Strength: Outputs exactly hap/ang/neu/sad — perfectly aligned with the 4-label target.
+          No label remapping required for audio model output.
+
+────────────────────────────────────────────────────────────────────────────────
+SIGNAL 3: ACOUSTIC FEATURES (physical measurements of the voice)
+────────────────────────────────────────────────────────────────────────────────
+These are raw mathematical measurements of the audio signal — not ML-based.
+They provide hard physical evidence that adjusts how much the fusion engine
+trusts the audio model:
+
+  Energy (loudness):
+    Angry or excited people speak louder → high RMS energy
+    Sad or depressed people speak quieter → low RMS energy
+    Serves as a "credibility check" on the audio emotion label
+
+  Pitch Variance (expressiveness):
+    Emotional speech has more pitch variation (melody-like)
+    Flat, monotone speech suggests suppressed emotion or depression
+    High pitch variance + high energy = very likely angry or very happy
+
+  Speech Rate (speed):
+    Anxious or nervous people talk faster
+    Sad, depressed people talk slower
+    Validates or challenges the audio model's label
+
+────────────────────────────────────────────────────────────────────────────────
+HOW THE THREE SIGNALS ARE COMBINED (The Fusion Decision)
+────────────────────────────────────────────────────────────────────────────────
+The FusionEngine makes a TRUST DECISION for each utterance:
+
+  Normally:         Trust text 60%, trust audio 40%
+                    Because text models are generally more accurate.
+
+  Text has strong explicit words → Trust text 85%, audio 15%
+                    Because "I feel devastated" is direct, unambiguous evidence.
+
+  Voice is loud + high-pitched AND audio says angry/happy → Trust audio 70%
+                    Because the physical signal is too strong to ignore.
+
+  Text says neutral, but voice says emotional → Trust audio 80%
+                    Because "I'm fine" while crying is a classic pattern.
+
+  Both models are uncertain → Inherit last known emotion
+                    Because emotion rarely vanishes in one utterance.
+
+  Result flips suddenly with low confidence → Resist the change (EMA=0.35)
+                    Because real emotional shifts are gradual, not instantaneous.
+
+This is called MULTIMODAL FUSION — combining multiple imperfect sources of
+information to get a more reliable answer than any single source alone.
+
+────────────────────────────────────────────────────────────────────────────────
+HOW THE SESSION EMOTION IS DETERMINED (The Aggregate View)
+────────────────────────────────────────────────────────────────────────────────
+After processing all utterances:
+
+  1. Each utterance has a final_emotion_probs (a probability distribution).
+  2. These are AVERAGED across all utterances → emotion_distribution.
+  3. The label with the highest average probability wins → dominant_emotion.
+  4. If no single emotion has more than 35% probability → label is "mixed"
+     (meaning the session had genuinely complex, multi-emotion content).
+
+The TREND is calculated by splitting the session in thirds (start/middle/end)
+and averaging each phase separately. This reveals whether the mood improved,
+declined, or stayed flat across the conversation.
+
+VALENCE scoring gives each emotion a positive/negative value:
+  happy=+2, neutral=0, sad=-2, angry=-2   (4 labels only)
+
+By comparing start valence to end valence:
+  end > start → Positive progression → encouraging insight
+  end < start → Emotional decline → supportive insight
+  high volatility → Complex/mixed state → acknowledgment
+
+The final output (SessionAnalytics) is a structured report that any application
+can use: charts (use emotion_distribution), timelines (use intensity_trend),
+summaries (use insight_summary), and progress metrics (stability_score,
+upward_transitions, downward_transitions).
+
+────────────────────────────────────────────────────────────────────────────────
+WHY THIS APPROACH IS RELIABLE
+────────────────────────────────────────────────────────────────────────────────
+  • Text alone fails when people mask emotions with words
+  • Audio alone fails with only 4 labels and no linguistic context
+  • Acoustic features alone are too noisy to be conclusive
+  • Together, they cover each other's blind spots
+
+  • EMA smoothing prevents false alarms from one unusual utterance
+  • Fallback to previous prevents complete confusion when models disagree badly
+  • Keyword override prevents fusion from diluting clear explicit emotional statements
+  • Neutral-conflict rule catches the most common human masking pattern
+
+The result is a system that is:
+  - More accurate than either model alone
+  - Resilient to model uncertainty
+  - Temporally consistent (no wild flips)
+  - Explainable (every decision is a deterministic rule, not a black box)
+
+================================================================================
+  END OF SERVICE REFERENCE
+================================================================================

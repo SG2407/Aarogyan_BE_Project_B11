@@ -15,6 +15,7 @@ class BuddyRepository {
     String text,
     List<Map<String, String>> history, {
     String preferredLanguage = 'English',
+    String? sessionGroupId,
   }) async {
     final resp = await _dio.post(
       '/buddy/chat',
@@ -22,6 +23,7 @@ class BuddyRepository {
         'text': text,
         'history': history,
         'preferred_language': preferredLanguage,
+        if (sessionGroupId != null) 'session_group_id': sessionGroupId,
       },
       options: Options(
         receiveTimeout: const Duration(minutes: 3),
@@ -51,6 +53,43 @@ class BuddyRepository {
         receiveTimeout: const Duration(minutes: 5),
         sendTimeout: const Duration(minutes: 2),
       ),
+    );
+    return resp.data as Map<String, dynamic>;
+  }
+
+  /// Sends recorded audio (+ optional transcribed text) to the backend for
+  /// voice-based emotion analysis.  This does NOT participate in the
+  /// conversation flow — it is a fire-and-forget side-channel.
+  Future<Map<String, dynamic>> analyzeVoiceEmotion(
+    String audioFilePath, {
+    String? text,
+    String? sessionId,
+  }) async {
+    final formData = FormData.fromMap({
+      'audio': await MultipartFile.fromFile(
+        audioFilePath,
+        filename: 'voice.wav',
+        contentType: MediaType('audio', 'wav'),
+      ),
+      if (text != null) 'text': text,
+      if (sessionId != null) 'session_id': sessionId,
+    });
+    final resp = await _dio.post(
+      '/buddy/analyze-voice',
+      data: formData,
+      options: Options(
+        receiveTimeout: const Duration(minutes: 2),
+        sendTimeout: const Duration(minutes: 1),
+      ),
+    );
+    return resp.data as Map<String, dynamic>;
+  }
+
+  /// Fetches session-level emotion analytics for a conversation group.
+  Future<Map<String, dynamic>> getSessionAnalytics(
+      String sessionGroupId) async {
+    final resp = await _dio.get(
+      '/buddy/session-analytics/$sessionGroupId',
     );
     return resp.data as Map<String, dynamic>;
   }

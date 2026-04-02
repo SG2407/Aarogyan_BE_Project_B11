@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libxrender1 \
+    libsndfile1 \
     git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -46,7 +47,12 @@ print('SentenceTransformer cached'); \
 from transformers import AutoTokenizer, AutoModelForSequenceClassification; \
 AutoTokenizer.from_pretrained('cross-encoder/ms-marco-MiniLM-L-6-v2'); \
 AutoModelForSequenceClassification.from_pretrained('cross-encoder/ms-marco-MiniLM-L-6-v2'); \
-print('CrossEncoder cached')"
+print('CrossEncoder cached'); \
+from transformers import pipeline as _p; \
+_p('text-classification', model='j-hartmann/emotion-english-distilroberta-base', top_k=None); \
+print('Emotion classifier cached'); \
+_p('audio-classification', model='superb/wav2vec2-base-superb-er'); \
+print('Audio emotion classifier cached')"
 
 # ── 5. Pre-download EasyOCR models ────────────────────────────────────────────
 RUN python -c "\

@@ -7,6 +7,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../data/buddy_repository.dart';
@@ -31,6 +32,8 @@ class BuddyStateData {
   final List<ConversationTurn> history;
   final String? error;
   final double soundLevel; // 0.0–1.0, driven by mic input while listening
+  final String? sessionGroupId;
+  final Map<String, dynamic>? sessionSummary;
 
   const BuddyStateData({
     this.phase = BuddyPhase.idle,
@@ -40,6 +43,8 @@ class BuddyStateData {
     this.history = const [],
     this.error,
     this.soundLevel = 0.0,
+    this.sessionGroupId,
+    this.sessionSummary,
   });
 
   BuddyStateData copyWith({
@@ -50,6 +55,8 @@ class BuddyStateData {
     List<ConversationTurn>? history,
     String? error,
     double? soundLevel,
+    String? sessionGroupId,
+    Map<String, dynamic>? sessionSummary,
   }) {
     return BuddyStateData(
       phase: phase ?? this.phase,
@@ -59,6 +66,8 @@ class BuddyStateData {
       history: history ?? this.history,
       error: error,
       soundLevel: soundLevel ?? this.soundLevel,
+      sessionGroupId: sessionGroupId ?? this.sessionGroupId,
+      sessionSummary: sessionSummary,
     );
   }
 }
@@ -81,6 +90,9 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
   /// Partial transcript while speech-to-text is running
   String _partialTranscript = '';
 
+  /// Guard against _processText being called twice for the same utterance
+  bool _processing = false;
+
   @override
   BuddyStateData build() {
     ref.onDispose(() {
@@ -97,11 +109,13 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
   /// Initialises on-device STT and immediately starts listening.
   Future<void> startConversation({String preferredLang = 'English'}) async {
     _preferredLang = preferredLang;
+    final groupId = const Uuid().v4();
     _set(state.copyWith(
       conversationActive: true,
       history: [],
       error: null,
       soundLevel: 0.0,
+      sessionGroupId: groupId,
     ));
     await _initSpeech();
     if (_speechInitialised) {
@@ -124,6 +138,11 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     await _speech.stop();
     await _player.stop();
     _partialTranscript = '';
+
+    _set(const BuddyStateData());
+  }
+
+  void clearSummary() {
     _set(const BuddyStateData());
   }
 
@@ -181,7 +200,7 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     _partialTranscript = result.recognizedWords;
 
     if (result.finalResult && _partialTranscript.trim().isNotEmpty) {
-      _processText(_partialTranscript.trim());
+      if (!_processing) _processText(_partialTranscript.trim());
     }
   }
 
@@ -192,14 +211,15 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     if (status == 'done' &&
         state.phase == BuddyPhase.listening &&
         _partialTranscript.trim().isNotEmpty) {
-      _processText(_partialTranscript.trim());
+      if (!_processing) _processText(_partialTranscript.trim());
     }
   }
 
   /// Send recognised text to backend, play the response, then loop back to
   /// listening — completing the fully autonomous conversation cycle.
   Future<void> _processText(String userText) async {
-    if (_disposed) return;
+    if (_disposed || _processing) return;
+    _processing = true;
     await _speech.stop();
     _partialTranscript = '';
 
@@ -216,6 +236,7 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
         userText,
         historyMaps,
         preferredLanguage: _preferredLang,
+        sessionGroupId: state.sessionGroupId,
       );
 
       if (_disposed) return;
@@ -274,6 +295,7 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
         await _startListening();
       }
     }
+    _processing = false;
   }
 
   Future<void> _playBase64Audio(String base64Audio) async {
@@ -353,6 +375,9 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
     final convState = _toConvState(s.phase);
     final displayText = s.lastReply ?? s.lastUserText ?? '';
+
+    // Show session summary dialog when available
+    // (Removed — mood data is available in Mental Health Tracker instead)
 
     return Scaffold(
       backgroundColor: const Color(0xFF071412),
@@ -714,3 +739,4 @@ class _EndButton extends StatelessWidget {
     );
   }
 }
+

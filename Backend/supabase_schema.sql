@@ -141,11 +141,14 @@ CREATE TABLE IF NOT EXISTS emotional_sessions (
     buddy_text      TEXT,
     mood_score      SMALLINT CHECK (mood_score BETWEEN 1 AND 10),
     emotion         TEXT,
+    session_group_id UUID,
+    emotion_probs   JSONB,
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_emotional_sessions_user_id ON emotional_sessions (user_id);
 CREATE INDEX idx_emotional_sessions_created_at ON emotional_sessions (created_at);
+CREATE INDEX idx_emotional_sessions_group ON emotional_sessions (session_group_id);
 
 -- ────────────────────────────────────────────────────────────
 -- 9. STORAGE BUCKETS (run separately or via Supabase dashboard)
@@ -211,3 +214,12 @@ ALTER TABLE session_documents DISABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE emotional_sessions DISABLE ROW LEVEL SECURITY;
+
+-- ────────────────────────────────────────────────────────────
+-- 12. MIGRATION: Add emotion detection columns
+-- ────────────────────────────────────────────────────────────
+-- Run this if you already have the emotional_sessions table:
+--
+-- ALTER TABLE emotional_sessions ADD COLUMN IF NOT EXISTS session_group_id UUID;
+-- ALTER TABLE emotional_sessions ADD COLUMN IF NOT EXISTS emotion_probs JSONB;
+-- CREATE INDEX IF NOT EXISTS idx_emotional_sessions_group ON emotional_sessions (session_group_id);

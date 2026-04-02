@@ -19,9 +19,6 @@ const _emotions = {
   'happy': _EmotionMeta('Happy', '😊', Color(0xFF4CAF50)),
   'sad': _EmotionMeta('Sad', '😢', Color(0xFF42A5F5)),
   'angry': _EmotionMeta('Angry', '😠', Color(0xFFEF5350)),
-  'fearful': _EmotionMeta('Fearful', '😨', Color(0xFFAB47BC)),
-  'disgusted': _EmotionMeta('Disgusted', '🤢', Color(0xFF8D6E63)),
-  'surprised': _EmotionMeta('Surprised', '😮', Color(0xFFFFCA28)),
   'neutral': _EmotionMeta('Neutral', '😐', Color(0xFF78909C)),
 };
 
@@ -61,7 +58,8 @@ class _Dashboard extends ConsumerWidget {
   final Map<String, dynamic> data;
   final int filter;
   final String lang;
-  const _Dashboard({required this.data, required this.filter, required this.lang});
+  const _Dashboard(
+      {required this.data, required this.filter, required this.lang});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -71,6 +69,8 @@ class _Dashboard extends ConsumerWidget {
     final heatmap = (data['heatmap'] as List?) ?? [];
     final emotionDist = (data['emotion_distribution'] as Map?) ?? {};
     final latestSession = data['latest_session'] as Map?;
+    final dominantEmotion = (data['dominant_emotion'] as String?) ?? 'neutral';
+    final convSessions = (data['conversation_sessions'] as List?) ?? [];
 
     debugPrint(
         '[MentalHealth] total=$total daily=${daily.length} heatmap=${heatmap.length} emotions=$emotionDist');
@@ -109,7 +109,13 @@ class _Dashboard extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
+
+        // ── Dominant emotion card ──────────────────────────────────────────
+        if (total > 0) ...[
+          _DominantEmotionCard(emotion: dominantEmotion),
+          const SizedBox(height: 24),
+        ],
 
         if (total == 0) ...[
           _EmptyState(lang: lang),
@@ -125,6 +131,14 @@ class _Dashboard extends ConsumerWidget {
           const SizedBox(height: 12),
           _EmotionDonutChart(distribution: emotionDist),
           const SizedBox(height: 24),
+
+          // ── Conversation Sessions ────────────────────────────────────────
+          if (convSessions.isNotEmpty) ...[
+            _SectionTitle('Conversation Sessions'),
+            const SizedBox(height: 12),
+            _ConversationSessionsList(sessions: convSessions),
+            const SizedBox(height: 24),
+          ],
 
           // ── Heatmap Calendar (#4) ────────────────────────────────────────
           _SectionTitle(appStr(lang, 'mood_calendar')),
@@ -224,8 +238,22 @@ class _LatestEmotionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final emotion =
-        ((session['emotion'] as String?) ?? 'neutral').toLowerCase();
+    // Prefer ML-detected emotion from emotion_probs if available
+    String emotion;
+    final ep = session['emotion_probs'];
+    if (ep != null && ep is Map && ep.isNotEmpty) {
+      emotion = (ep.entries
+              .reduce((a, b) => (a.value as num) >= (b.value as num) ? a : b))
+          .key as String;
+    } else {
+      final raw = ((session['emotion'] as String?) ?? 'neutral').toLowerCase();
+      const remap = {
+        'fearful': 'sad',
+        'disgusted': 'angry',
+        'surprised': 'happy'
+      };
+      emotion = remap[raw] ?? raw;
+    }
     final meta = _emotions[emotion] ?? _emotions['neutral']!;
     final score = (session['mood_score'] as num?)?.toDouble() ?? 0;
     final createdAt = session['created_at'] as String? ?? '';
@@ -302,6 +330,170 @@ class _LatestEmotionCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ─── Dominant Emotion Card ────────────────────────────────────────────────────
+class _DominantEmotionCard extends StatelessWidget {
+  final String emotion;
+  const _DominantEmotionCard({required this.emotion});
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = _emotions[emotion] ?? _emotions['neutral']!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: meta.color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: meta.color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Text(meta.emoji, style: const TextStyle(fontSize: 28)),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Dominant Mood',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.55))),
+              Text(meta.label,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: meta.color, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Conversation Sessions List ───────────────────────────────────────────────
+class _ConversationSessionsList extends StatelessWidget {
+  final List sessions;
+  const _ConversationSessionsList({required this.sessions});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: _cardDecor(context),
+      child: Column(
+        children: [
+          for (int i = 0; i < sessions.length; i++) ...[
+            _ConversationSessionTile(
+                session: sessions[i] as Map<String, dynamic>),
+            if (i < sessions.length - 1)
+              Divider(
+                  height: 1,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.06)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ConversationSessionTile extends StatelessWidget {
+  final Map<String, dynamic> session;
+  const _ConversationSessionTile({required this.session});
+
+  @override
+  Widget build(BuildContext context) {
+    final dominant = (session['dominant_emotion'] as String?) ?? 'neutral';
+    final meta = _emotions[dominant] ?? _emotions['neutral']!;
+    final msgCount = (session['message_count'] as num?)?.toInt() ?? 0;
+    final stability = (session['stability_score'] as num?)?.toInt() ?? 0;
+    final avgMood = (session['average_mood'] as num?)?.toDouble() ?? 0;
+    final insight = session['insight_summary'] as String? ?? '';
+    final startedAt = session['started_at'] as String? ?? '';
+
+    String timeStr = '';
+    try {
+      final dt = DateTime.parse(startedAt).toLocal();
+      timeStr =
+          '${dt.day}/${dt.month}/${dt.year}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {}
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(meta.emoji, style: const TextStyle(fontSize: 24)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      meta.label,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: meta.color,
+                          fontSize: 14),
+                    ),
+                    if (timeStr.isNotEmpty)
+                      Text(timeStr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.45),
+                                  fontSize: 11)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('${avgMood.toStringAsFixed(1)}/10',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _moodColorStatic(avgMood))),
+                  Text('$msgCount msgs · $stability% stable',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.45),
+                          fontSize: 10)),
+                ],
+              ),
+            ],
+          ),
+          if (insight.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(insight,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.55),
+                    fontSize: 12,
+                    height: 1.3)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static Color _moodColorStatic(double score) {
+    if (score >= 7) return const Color(0xFF4CAF50);
+    if (score >= 4) return const Color(0xFFFFC107);
+    return AppColors.error;
   }
 }
 
@@ -931,7 +1123,8 @@ class _ErrorState extends StatelessWidget {
           const SizedBox(height: 12),
           Text(appStr(lang, 'could_not_load')),
           const SizedBox(height: 12),
-          ElevatedButton(onPressed: onRetry, child: Text(appStr(lang, 'retry'))),
+          ElevatedButton(
+              onPressed: onRetry, child: Text(appStr(lang, 'retry'))),
         ],
       ),
     );
