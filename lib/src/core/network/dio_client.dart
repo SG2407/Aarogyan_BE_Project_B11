@@ -2,10 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'token_storage.dart';
 
-// Change to your machine's IP when running on physical device
-// iOS simulator: http://localhost:8000
-// Android emulator: http://10.0.2.2:8000
-const String kBaseUrl = 'https://sg2407-aarogyan-project.hf.space/api/v1';
+// HuggingFace Space: https://huggingface.co/spaces/SG2407/Aarogyan
+const String kBaseUrl = 'https://sg2407-aarogyan.hf.space/api/v1';
 
 Dio createDio() {
   final dio = Dio(
