@@ -9,9 +9,10 @@ import base64
 import os
 from app.auth import get_current_user_id
 from app.database import get_supabase
-from app.services.ai import emotional_buddy_respond, emotional_buddy_respond_stream
+from app.services.ai import emotional_buddy_respond, emotional_buddy_respond_stream, llm_classify_emotion
 from app.services.tts import text_to_speech_bytes
 from app.services.stt import speech_to_text
+from app.services.voice_features import extract_voice_features, format_voice_context
 
 logger = logging.getLogger(__name__)
 
@@ -84,16 +85,20 @@ def _fuse_emotions(
     text: str,
     text_probs: dict[str, float],
     audio_probs: dict[str, float] | None,
+    is_english: bool = True,
 ) -> dict[str, float]:
     """Fuse text + audio emotion probs. Falls back to text-only if no audio."""
     if audio_probs is None:
         return text_probs
     try:
         from app.services.fusion_engine import fuse_once
-        return fuse_once(text, text_probs, audio_probs)
+        return fuse_once(text, text_probs, audio_probs, is_english=is_english)
     except Exception as e:
         logger.warning("Emotion fusion failed, using text-only: %s", e)
         return text_probs
+
+
+_ENGLISH_LANGS = {"English", "en"}
 
 
 @router.post("/chat")
@@ -110,13 +115,17 @@ async def text_chat(
 
     history = body.history or []
     lang_code = _LANG_CODE.get(body.preferred_language, "en")
+    is_english = body.preferred_language in _ENGLISH_LANGS
 
-    # AI response
-    ai_text, mood_score, emotion = await emotional_buddy_respond(body.text, history, body.preferred_language)
-
-    # ML-based text emotion detection (4 labels, more reliable than LLM self-report)
-    emotion_probs = _detect_emotion_ml(body.text)
+    # ML-based text emotion detection: DistilRoBERTa for English, LLM for others
+    if is_english:
+        emotion_probs = _detect_emotion_ml(body.text)
+    else:
+        emotion_probs = await llm_classify_emotion(body.text, body.preferred_language)
     ml_dominant = max(emotion_probs, key=lambda k: emotion_probs[k])
+
+    # AI response (no voice context available in text-only path)
+    ai_text, mood_score, emotion = await emotional_buddy_respond(body.text, history, body.preferred_language)
 
     # TTS — non-critical: failure returns empty audio, client can still show text
     audio_response = b""
@@ -179,9 +188,15 @@ async def voice_chat(
     # AI response
     ai_text, mood_score, emotion = await emotional_buddy_respond(user_text, history)
 
-    # ML-based text emotion detection
+    # ML-based text emotion detection (English-only, /voice doesn't declare language)
     emotion_probs = _detect_emotion_ml(user_text)
-    ml_dominant = max(emotion_probs, key=lambda k: emotion_probs[k])
+
+    # Audio emotion + voice features
+    audio_probs = _detect_audio_emotion_ml(audio_bytes)
+    voice_feats = extract_voice_features(audio_bytes)
+
+    fused_probs = _fuse_emotions(user_text, emotion_probs, audio_probs)
+    ml_dominant = max(fused_probs, key=lambda k: fused_probs[k])
 
     # TTS — non-critical: if edge-tts fails, return text with no audio
     audio_response = b""
@@ -213,7 +228,7 @@ async def voice_chat(
         "buddy_text": ai_text,
         "mood_score": mood_score,
         "emotion": ml_dominant,
-        "emotion_probs": emotion_probs,
+        "emotion_probs": fused_probs,
         "session_id": session_id,
         "audio_base64": base64.b64encode(audio_response).decode("utf-8") if audio_response else "",
     }
@@ -308,20 +323,38 @@ async def chat_stream(
     chosen_speaker = speaker if speaker in _VALID_SPEAKERS else "priya"
 
     async def _generate():
-        # ── 1. STT + audio emotion in parallel ────────────────────────────
-        user_text, audio_probs = await asyncio.gather(
+        is_english = preferred_language in _ENGLISH_LANGS
+
+        # ── 1. STT + audio emotion + voice features in parallel ───────────
+        user_text, audio_probs, voice_feats = await asyncio.gather(
             speech_to_text(audio_bytes, content_type),
             asyncio.to_thread(_detect_audio_emotion_ml, audio_bytes),
+            asyncio.to_thread(extract_voice_features, audio_bytes),
         )
 
         if not user_text or not user_text.strip():
             yield json.dumps({"type": "error", "message": "Could not transcribe audio"}) + "\n"
             return
 
-        # Text emotion + fusion
-        text_probs = _detect_emotion_ml(user_text)
-        fused_probs = _fuse_emotions(user_text, text_probs, audio_probs)
+        # ── Text emotion: ML model for English, LLM classifier otherwise ─
+        if is_english:
+            text_probs = _detect_emotion_ml(user_text)
+        else:
+            text_probs = await llm_classify_emotion(user_text, preferred_language)
+
+        fused_probs = _fuse_emotions(user_text, text_probs, audio_probs, is_english=is_english)
         fused_dominant = max(fused_probs, key=lambda k: fused_probs[k])
+
+        # Build voice context for LLM prompt
+        text_dominant = max(text_probs, key=lambda k: text_probs[k])
+        audio_dominant = max(audio_probs, key=lambda k: audio_probs[k])
+        voice_ctx = format_voice_context(
+            voice_feats,
+            audio_emotion=audio_dominant,
+            audio_confidence=audio_probs[audio_dominant],
+            text_emotion=text_dominant,
+            text_confidence=text_probs[text_dominant],
+        )
 
         # Yield transcript event
         yield json.dumps({
@@ -336,7 +369,7 @@ async def chat_stream(
         idx = 0
 
         async for sentence in emotional_buddy_respond_stream(
-            user_text, history, preferred_language
+            user_text, history, preferred_language, voice_context=voice_ctx,
         ):
             full_reply += (" " if full_reply else "") + sentence
 

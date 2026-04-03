@@ -149,23 +149,33 @@ def fuse_once(
     text: str,
     text_probs: EmotionProbs,
     audio_probs: EmotionProbs,
+    is_english: bool = True,
 ) -> EmotionProbs:
-    """Stateless single-shot fusion (no temporal smoothing / no history)."""
+    """Stateless single-shot fusion (no temporal smoothing / no history).
+
+    When is_english=False, keyword override (Rule 1) is skipped because
+    STRONG_KEYWORDS only contains English words. The text_probs in that case
+    come from the LLM classifier, which already captures semantic intent,
+    so we slightly boost audio weight instead (0.50/0.50).
+    """
     t_label, t_conf = _dominant(text_probs)
     a_label, a_conf = _dominant(audio_probs)
-    w_text, w_audio = DEFAULT_W_TEXT, DEFAULT_W_AUDIO
 
-    text_lower = text.lower()
+    if is_english:
+        w_text, w_audio = DEFAULT_W_TEXT, DEFAULT_W_AUDIO
+        text_lower = text.lower()
+        for _emotion, keywords in STRONG_KEYWORDS.items():
+            if any(kw in text_lower for kw in keywords):
+                w_text, w_audio = 0.85, 0.15
+                break
+    else:
+        # Non-English: text probs from LLM (decent but noisier) — equal weight
+        w_text, w_audio = 0.50, 0.50
 
-    for _emotion, keywords in STRONG_KEYWORDS.items():
-        if any(kw in text_lower for kw in keywords):
-            w_text, w_audio = 0.85, 0.15
-            break
-
-    if w_text == DEFAULT_W_TEXT and t_label == "neutral" and a_label != "neutral" and a_conf > CONF_LOW:
+    if w_text >= 0.50 and t_label == "neutral" and a_label != "neutral" and a_conf > CONF_LOW:
         w_text, w_audio = 0.20, 0.80
 
-    if w_text == DEFAULT_W_TEXT and a_conf - t_conf > 0.30:
+    if w_text >= 0.50 and a_conf - t_conf > 0.30:
         w_text, w_audio = 0.30, 0.70
 
     return _weighted_fuse(text_probs, audio_probs, w_text, w_audio)

@@ -195,7 +195,16 @@ Example (Marathi):
 {"response": "तुमची बात ऐकून जाणवतं की तुम्ही खूप काही सहत आहात. आज सर्वात जड काय वाटतंय?", "mood_score": 4, "emotion": "sad"}
 
 ━━━ LANGUAGE ━━━
-Detect the language of the user's message (English, Hindi, or Marathi) and write the "response" value in that exact same language. If the language is ambiguous, use the user's preferred language as the fallback. Always keep the JSON keys in English."""
+Detect the language of the user's message (English, Hindi, or Marathi) and write the "response" value in that exact same language. If the language is ambiguous, use the user's preferred language as the fallback. Always keep the JSON keys in English.
+
+━━━ VOICE ANALYSIS (if provided) ━━━
+You may receive a [Voice Analysis] block with vocal emotion, pitch, energy, and speaking rate data.
+Use this to understand HOW the user is feeling beyond just their words.
+If there is a CONFLICT between text and voice emotion (e.g. words say happy but voice sounds sad),
+gently and compassionately address the deeper emotion you sense — the voice often reveals what words hide.
+NEVER mention the voice analysis, scores, or technical details in your response.
+NEVER say things like 'your voice sounds sad' or 'I detected anger in your tone'.
+Instead, naturally reflect the emotional undercurrent: 'It seems like there might be more beneath the surface...'"""
 
 
 async def _call_groq(messages: list[dict], system: str, temperature: float = 0.7) -> str:
@@ -349,9 +358,54 @@ def _clean_buddy_reply(text: str) -> str:
     return "\n".join(clean).strip()
 
 
-async def emotional_buddy_respond(user_text: str, history: list[dict] | None = None, preferred_lang: str = "English") -> tuple[str, int, str]:
+async def llm_classify_emotion(text: str, preferred_lang: str = "English") -> dict[str, float]:
+    """Use the LLM to classify text emotion for non-English text.
+
+    Returns 4-label EmotionProbs dict compatible with fusion engine.
+    Falls back to neutral on any error.
+    """
+    _CLASSIFY_SYSTEM = (
+        "You are an emotion classifier. Given the user's text (which may be in Hindi, Marathi, "
+        "or any language), classify the dominant emotion.\n"
+        "Respond ONLY with valid JSON — no extra text:\n"
+        '{"happy": <0.0-1.0>, "sad": <0.0-1.0>, "angry": <0.0-1.0>, "neutral": <0.0-1.0>}\n'
+        "The four values must sum to 1.0. Be accurate — consider context, idioms, and tone."
+    )
+    try:
+        raw = await _call_groq(
+            [{"role": "user", "content": text}],
+            _CLASSIFY_SYSTEM,
+            temperature=0.0,
+        )
+        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = json.loads(cleaned)
+        probs = {
+            "happy": float(data.get("happy", 0.0)),
+            "sad": float(data.get("sad", 0.0)),
+            "angry": float(data.get("angry", 0.0)),
+            "neutral": float(data.get("neutral", 0.0)),
+        }
+        total = sum(probs.values())
+        if total > 0:
+            probs = {k: v / total for k, v in probs.items()}
+        else:
+            probs["neutral"] = 1.0
+        return probs
+    except Exception as e:
+        logger.warning("LLM emotion classification failed: %s", e)
+        return {"happy": 0.0, "sad": 0.0, "angry": 0.0, "neutral": 1.0}
+
+
+async def emotional_buddy_respond(
+    user_text: str,
+    history: list[dict] | None = None,
+    preferred_lang: str = "English",
+    voice_context: str = "",
+) -> tuple[str, int, str]:
     """Returns (buddy_reply_text, mood_score, emotion)."""
     system = EMOTIONAL_BUDDY_SYSTEM + f"\n\nThe user's preferred language is {preferred_lang}."
+    if voice_context:
+        system += f"\n\n{voice_context}"
     messages = list(history or [])
     messages.append({"role": "user", "content": user_text})
     raw = await _call_groq(messages, system, temperature=0.75)
@@ -449,7 +503,16 @@ Just speak naturally as Orbz — your words will be spoken aloud directly.
 
 ━━━ LANGUAGE ━━━
 Detect the language of the user's message (English, Hindi, or Marathi) and respond in that exact
-same language. If the language is ambiguous, use the user's preferred language as the fallback."""
+same language. If the language is ambiguous, use the user's preferred language as the fallback.
+
+━━━ VOICE ANALYSIS (if provided) ━━━
+You may receive a [Voice Analysis] block with vocal emotion, pitch, energy, and speaking rate data.
+Use this to understand HOW the user is feeling beyond just their words.
+If there is a CONFLICT between text and voice emotion (e.g. words say happy but voice sounds sad),
+gently and compassionately address the deeper emotion you sense — the voice often reveals what words hide.
+NEVER mention the voice analysis, scores, or technical details in your response.
+NEVER say things like 'your voice sounds sad' or 'I detected anger in your tone'.
+Instead, naturally reflect the emotional undercurrent: 'It seems like there might be more beneath the surface...'"""
 
 
 async def _call_groq_stream(messages: list[dict], system: str, temperature: float = 0.7):
@@ -495,6 +558,7 @@ async def emotional_buddy_respond_stream(
     user_text: str,
     history: list[dict] | None = None,
     preferred_lang: str = "English",
+    voice_context: str = "",
 ):
     """Async generator that yields complete sentences from the buddy.
 
@@ -502,6 +566,8 @@ async def emotional_buddy_respond_stream(
     those should be derived from ML emotion models by the caller.
     """
     system = EMOTIONAL_BUDDY_STREAM_SYSTEM + f"\n\nThe user's preferred language is {preferred_lang}."
+    if voice_context:
+        system += f"\n\n{voice_context}"
     messages = list(history or [])
     messages.append({"role": "user", "content": user_text})
 
