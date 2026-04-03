@@ -582,52 +582,66 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     final convState = _toConvState(s.phase);
     final displayText = s.lastReply ?? s.lastUserText ?? '';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scaffoldBg = isDark ? const Color(0xFF071412) : const Color(0xFFF7FAF9);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF071412),
+      backgroundColor: scaffoldBg,
       body: FadeTransition(
         opacity: _entryFade,
         child: SlideTransition(
           position: _entrySlide,
           child: Stack(
             children: [
-              _AnimatedBackground(state: convState),
+              _AnimatedBackground(state: convState, isDark: isDark),
               SafeArea(
-                child: Column(
-                  children: [
-                    _buildTopBar(context, notifier, s),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _StateLabel(state: convState),
-                          const SizedBox(height: 20),
-                          OrbWidget(state: convState, size: 200),
-                          const SizedBox(height: 20),
-                          _DisplayText(text: displayText),
-                        ],
-                      ),
-                    ),
-                    if (s.error != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 8),
-                        child: Text(
-                          s.error!,
-                          style: TextStyle(
-                            color: const Color(0xFFFF6666).withOpacity(0.9),
-                            fontSize: 13,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Column(
+                      children: [
+                        _buildTopBar(context, notifier, s, preferredLang, isDark),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: constraints.maxHeight - 140,
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _StateLabel(state: convState, lang: preferredLang, isDark: isDark),
+                                  const SizedBox(height: 20),
+                                  OrbWidget(state: convState, size: 200),
+                                  const SizedBox(height: 20),
+                                  _DisplayText(text: displayText, isDark: isDark),
+                                ],
+                              ),
+                            ),
                           ),
-                          textAlign: TextAlign.center,
                         ),
-                      ),
-                    _BuddyBottomControls(
-                      isActive: s.conversationActive,
-                      onStart: () => notifier.startConversation(
-                          preferredLang: preferredLang),
-                      onEnd: notifier.endConversation,
-                      lang: preferredLang,
-                    ),
-                  ],
+                        if (s.error != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 8),
+                            child: Text(
+                              s.error!,
+                              style: TextStyle(
+                                color: const Color(0xFFFF6666).withOpacity(0.9),
+                                fontSize: 13,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        _BuddyBottomControls(
+                          isActive: s.conversationActive,
+                          onStart: () => notifier.startConversation(
+                              preferredLang: preferredLang),
+                          onEnd: notifier.endConversation,
+                          lang: preferredLang,
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -638,7 +652,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   }
 
   Widget _buildTopBar(
-      BuildContext context, BuddyNotifier notifier, BuddyStateData s) {
+      BuildContext context, BuddyNotifier notifier, BuddyStateData s, String lang, bool isDark) {
+    final textColor = isDark ? Colors.white : AppColors.textPrimary;
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
       child: Row(
@@ -646,24 +661,25 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
           // ── Instruction button (top-left) ──
           _GlassIconButton(
             icon: Icons.info_outline_rounded,
-            onTap: () => _showInstructionsDialog(context),
+            onTap: () => _showInstructionsDialog(context, lang, isDark),
+            isDark: isDark,
           ),
           const Spacer(),
           // ── Title ──
           Column(
             children: [
-              const Text(
-                'Buddy',
+              Text(
+                appStr(lang, 'buddy_name'),
                 style: TextStyle(
-                  color: Colors.white,
+                  color: textColor,
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               Text(
-                'Your Emotional Companion',
+                appStr(lang, 'buddy_subtitle'),
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.45),
+                  color: textColor.withOpacity(0.45),
                   fontSize: 11,
                 ),
               ),
@@ -673,26 +689,27 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
           // ── Voice selection button (top-right) ──
           _GlassIconButton(
             icon: Icons.record_voice_over_rounded,
-            onTap: () => _showVoiceSelectionSheet(context, ref),
+            onTap: () => _showVoiceSelectionSheet(context, ref, lang, isDark),
+            isDark: isDark,
           ),
         ],
       ),
     );
   }
 
-  void _showInstructionsDialog(BuildContext context) {
+  void _showInstructionsDialog(BuildContext context, String lang, bool isDark) {
     showDialog(
       context: context,
-      builder: (_) => const _InstructionsDialog(),
+      builder: (_) => _InstructionsDialog(lang: lang, isDark: isDark),
     );
   }
 
-  void _showVoiceSelectionSheet(BuildContext context, WidgetRef ref) {
+  void _showVoiceSelectionSheet(BuildContext context, WidgetRef ref, String lang, bool isDark) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _VoiceSelectionSheet(parentRef: ref),
+      builder: (_) => _VoiceSelectionSheet(parentRef: ref, lang: lang, isDark: isDark),
     );
   }
 }
@@ -700,7 +717,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 // ─── Animated background gradient ─────────────────────────────────────────────
 class _AnimatedBackground extends StatelessWidget {
   final ConversationState state;
-  const _AnimatedBackground({required this.state});
+  final bool isDark;
+  const _AnimatedBackground({required this.state, required this.isDark});
 
   Color _bgColorFor(ConversationState s) {
     switch (s) {
@@ -720,13 +738,14 @@ class _AnimatedBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _bgColorFor(state);
+    final bgBase = isDark ? const Color(0xFF071412) : const Color(0xFFF7FAF9);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 700),
       decoration: BoxDecoration(
         gradient: RadialGradient(
           center: const Alignment(0, -0.2),
           radius: 1.4,
-          colors: [color.withOpacity(0.22), const Color(0xFF071412)],
+          colors: [color.withOpacity(isDark ? 0.22 : 0.12), bgBase],
         ),
       ),
     );
@@ -736,25 +755,28 @@ class _AnimatedBackground extends StatelessWidget {
 // ─── State label above orb ─────────────────────────────────────────────────────
 class _StateLabel extends StatelessWidget {
   final ConversationState state;
-  const _StateLabel({required this.state});
+  final String lang;
+  final bool isDark;
+  const _StateLabel({required this.state, required this.lang, required this.isDark});
 
   String get _label {
     switch (state) {
       case ConversationState.idle:
-        return 'Tap to start';
+        return appStr(lang, 'tap_to_start');
       case ConversationState.listening:
-        return 'Listening...';
+        return appStr(lang, 'listening');
       case ConversationState.processing:
-        return 'Processing...';
+        return appStr(lang, 'processing');
       case ConversationState.thinking:
-        return 'Buddy is thinking...';
+        return appStr(lang, 'thinking');
       case ConversationState.speaking:
-        return 'Buddy is speaking...';
+        return appStr(lang, 'speaking');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final textColor = isDark ? Colors.white : AppColors.textPrimary;
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 400),
       transitionBuilder: (child, anim) =>
@@ -763,7 +785,7 @@ class _StateLabel extends StatelessWidget {
         _label,
         key: ValueKey(_label),
         style: TextStyle(
-          color: Colors.white.withOpacity(0.6),
+          color: textColor.withOpacity(0.6),
           fontSize: 15,
           fontWeight: FontWeight.w400,
           letterSpacing: 0.5,
@@ -776,10 +798,12 @@ class _StateLabel extends StatelessWidget {
 // ─── Display text bubble ───────────────────────────────────────────────────────
 class _DisplayText extends StatelessWidget {
   final String text;
-  const _DisplayText({required this.text});
+  final bool isDark;
+  const _DisplayText({required this.text, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
+    final textColor = isDark ? Colors.white : AppColors.textPrimary;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: AnimatedSwitcher(
@@ -796,10 +820,10 @@ class _DisplayText extends StatelessWidget {
                   vertical: 14,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.07),
+                  color: (isDark ? Colors.white : Colors.black).withOpacity(0.07),
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.1),
+                    color: (isDark ? Colors.white : Colors.black).withOpacity(0.1),
                     width: 1,
                   ),
                 ),
@@ -807,8 +831,8 @@ class _DisplayText extends StatelessWidget {
                   child: Text(
                     text,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: textColor,
                       fontSize: 15,
                       height: 1.55,
                       fontWeight: FontWeight.w400,
@@ -979,21 +1003,23 @@ class _EndButton extends StatelessWidget {
 class _GlassIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  const _GlassIconButton({required this.icon, required this.onTap});
+  final bool isDark;
+  const _GlassIconButton({required this.icon, required this.onTap, this.isDark = true});
 
   @override
   Widget build(BuildContext context) {
+    final fgColor = isDark ? Colors.white : AppColors.textPrimary;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.08),
+          color: fgColor.withOpacity(0.08),
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withOpacity(0.12)),
+          border: Border.all(color: fgColor.withOpacity(0.12)),
         ),
-        child: Icon(icon, color: Colors.white.withOpacity(0.7), size: 20),
+        child: Icon(icon, color: fgColor.withOpacity(0.7), size: 20),
       ),
     );
   }
@@ -1001,78 +1027,83 @@ class _GlassIconButton extends StatelessWidget {
 
 // ─── Instructions dialog ──────────────────────────────────────────────────────
 class _InstructionsDialog extends StatelessWidget {
-  const _InstructionsDialog();
+  final String lang;
+  final bool isDark;
+  const _InstructionsDialog({required this.lang, required this.isDark});
 
-  static const _tips = [
+  List<Map<String, dynamic>> _tips() => [
     {
       'icon': Icons.mic_rounded,
-      'title': 'Speak naturally',
-      'desc': 'Talk to Buddy like you would to a close friend. '
-          'There\'s no right or wrong way to express yourself.',
+      'titleKey': 'tip_speak_title',
+      'descKey': 'tip_speak_desc',
     },
     {
       'icon': Icons.timer_rounded,
-      'title': 'Take your time',
-      'desc': 'Buddy waits for you — pauses while you think are fine. '
-          'Speak when you\'re ready.',
+      'titleKey': 'tip_time_title',
+      'descKey': 'tip_time_desc',
     },
     {
       'icon': Icons.language_rounded,
-      'title': 'Use your language',
-      'desc': 'Speak in English, Hindi, or Marathi — Buddy understands and '
-          'replies in the same language.',
+      'titleKey': 'tip_lang_title',
+      'descKey': 'tip_lang_desc',
     },
     {
       'icon': Icons.emoji_emotions_rounded,
-      'title': 'Be honest about feelings',
-      'desc': 'The more openly you share how you feel, the better Buddy can '
-          'support you and track your emotional health accurately.',
+      'titleKey': 'tip_honest_title',
+      'descKey': 'tip_honest_desc',
     },
     {
       'icon': Icons.insights_rounded,
-      'title': 'Check your Tracker',
-      'desc': 'Visit Mental Health Tracker to see mood trends, emotion '
-          'patterns, and insights from your sessions.',
+      'titleKey': 'tip_tracker_title',
+      'descKey': 'tip_tracker_desc',
     },
   ];
 
   @override
   Widget build(BuildContext context) {
+    final bgColor = isDark
+        ? const Color(0xFF0F1F1C).withOpacity(0.95)
+        : Colors.white.withOpacity(0.97);
+    final textColor = isDark ? Colors.white : AppColors.textPrimary;
+    final subTextColor = isDark ? Colors.white.withOpacity(0.45) : AppColors.textSecondary;
+    final borderColor = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08);
+
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 380),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F1F1C).withOpacity(0.95),
+          color: bgColor,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
+          border: Border.all(color: borderColor),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 20),
-            const Text(
-              'How to use Buddy',
+            Text(
+              appStr(lang, 'how_to_use'),
               style: TextStyle(
-                color: Colors.white,
+                color: textColor,
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              'Tips for the best experience',
+              appStr(lang, 'tips_subtitle'),
               style: TextStyle(
-                color: Colors.white.withOpacity(0.45),
+                color: subTextColor,
                 fontSize: 12,
               ),
             ),
             const SizedBox(height: 16),
-            ..._tips.map((tip) => _TipRow(
+            ..._tips().map((tip) => _TipRow(
                   icon: tip['icon'] as IconData,
-                  title: tip['title'] as String,
-                  desc: tip['desc'] as String,
+                  title: appStr(lang, tip['titleKey'] as String),
+                  desc: appStr(lang, tip['descKey'] as String),
+                  isDark: isDark,
                 )),
             const SizedBox(height: 12),
             Padding(
@@ -1089,9 +1120,9 @@ class _InstructionsDialog extends StatelessWidget {
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: const Text('Got it',
+                  child: Text(appStr(lang, 'got_it'),
                       style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                          const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                 ),
               ),
             ),
@@ -1107,11 +1138,13 @@ class _TipRow extends StatelessWidget {
   final IconData icon;
   final String title;
   final String desc;
+  final bool isDark;
   const _TipRow(
-      {required this.icon, required this.title, required this.desc});
+      {required this.icon, required this.title, required this.desc, this.isDark = true});
 
   @override
   Widget build(BuildContext context) {
+    final textColor = isDark ? Colors.white : AppColors.textPrimary;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Row(
@@ -1132,15 +1165,15 @@ class _TipRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: textColor,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     )),
                 const SizedBox(height: 2),
                 Text(desc,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.55),
+                      color: textColor.withOpacity(0.55),
                       fontSize: 12,
                       height: 1.4,
                     )),
@@ -1156,7 +1189,9 @@ class _TipRow extends StatelessWidget {
 // ─── Voice selection bottom sheet ─────────────────────────────────────────────
 class _VoiceSelectionSheet extends StatefulWidget {
   final WidgetRef parentRef;
-  const _VoiceSelectionSheet({required this.parentRef});
+  final String lang;
+  final bool isDark;
+  const _VoiceSelectionSheet({required this.parentRef, required this.lang, required this.isDark});
 
   @override
   State<_VoiceSelectionSheet> createState() => _VoiceSelectionSheetState();
@@ -1168,19 +1203,19 @@ class _VoiceSelectionSheetState extends State<_VoiceSelectionSheet> {
 
   static const _voices = [
     // Female
-    {'id': 'priya', 'name': 'Priya', 'gender': 'female', 'desc': 'Warm & gentle'},
-    {'id': 'simran', 'name': 'Simran', 'gender': 'female', 'desc': 'Calm & soothing'},
-    {'id': 'kavya', 'name': 'Kavya', 'gender': 'female', 'desc': 'Soft & empathetic'},
-    {'id': 'shreya', 'name': 'Shreya', 'gender': 'female', 'desc': 'Clear & friendly'},
-    {'id': 'neha', 'name': 'Neha', 'gender': 'female', 'desc': 'Bright & cheerful'},
-    {'id': 'roopa', 'name': 'Roopa', 'gender': 'female', 'desc': 'Mature & comforting'},
+    {'id': 'priya', 'name': 'Priya', 'gender': 'female', 'descKey': 'voice_warm_gentle'},
+    {'id': 'simran', 'name': 'Simran', 'gender': 'female', 'descKey': 'voice_calm_soothing'},
+    {'id': 'kavya', 'name': 'Kavya', 'gender': 'female', 'descKey': 'voice_soft_empathetic'},
+    {'id': 'shreya', 'name': 'Shreya', 'gender': 'female', 'descKey': 'voice_clear_friendly'},
+    {'id': 'neha', 'name': 'Neha', 'gender': 'female', 'descKey': 'voice_bright_cheerful'},
+    {'id': 'roopa', 'name': 'Roopa', 'gender': 'female', 'descKey': 'voice_mature_comforting'},
     // Male
-    {'id': 'aditya', 'name': 'Aditya', 'gender': 'male', 'desc': 'Calm & reassuring'},
-    {'id': 'kabir', 'name': 'Kabir', 'gender': 'male', 'desc': 'Deep & grounding'},
-    {'id': 'anand', 'name': 'Anand', 'gender': 'male', 'desc': 'Warm & supportive'},
-    {'id': 'rohan', 'name': 'Rohan', 'gender': 'male', 'desc': 'Friendly & steady'},
-    {'id': 'dev', 'name': 'Dev', 'gender': 'male', 'desc': 'Gentle & composed'},
-    {'id': 'rahul', 'name': 'Rahul', 'gender': 'male', 'desc': 'Warm & natural'},
+    {'id': 'aditya', 'name': 'Aditya', 'gender': 'male', 'descKey': 'voice_calm_reassuring'},
+    {'id': 'kabir', 'name': 'Kabir', 'gender': 'male', 'descKey': 'voice_deep_grounding'},
+    {'id': 'anand', 'name': 'Anand', 'gender': 'male', 'descKey': 'voice_warm_supportive'},
+    {'id': 'rohan', 'name': 'Rohan', 'gender': 'male', 'descKey': 'voice_friendly_steady'},
+    {'id': 'dev', 'name': 'Dev', 'gender': 'male', 'descKey': 'voice_gentle_composed'},
+    {'id': 'rahul', 'name': 'Rahul', 'gender': 'male', 'descKey': 'voice_warm_natural'},
   ];
 
   @override
@@ -1212,6 +1247,15 @@ class _VoiceSelectionSheetState extends State<_VoiceSelectionSheet> {
   Widget build(BuildContext context) {
     final currentSpeaker =
         widget.parentRef.watch(buddyNotifierProvider).selectedSpeaker;
+    final lang = widget.lang;
+    final isDark = widget.isDark;
+    final bgColor = isDark
+        ? const Color(0xFF0F1F1C).withOpacity(0.97)
+        : Colors.white.withOpacity(0.97);
+    final textColor = isDark ? Colors.white : AppColors.textPrimary;
+    final subTextColor = isDark ? Colors.white.withOpacity(0.45) : AppColors.textSecondary;
+    final borderColor = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08);
+    final handleColor = isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.15);
 
     return Container(
       margin: const EdgeInsets.only(top: 60),
@@ -1219,9 +1263,9 @@ class _VoiceSelectionSheetState extends State<_VoiceSelectionSheet> {
         maxHeight: MediaQuery.of(context).size.height * 0.75,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F1F1C).withOpacity(0.97),
+        color: bgColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1231,24 +1275,24 @@ class _VoiceSelectionSheetState extends State<_VoiceSelectionSheet> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: handleColor,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Choose a Voice',
+          Text(
+            appStr(lang, 'choose_voice'),
             style: TextStyle(
-              color: Colors.white,
+              color: textColor,
               fontSize: 18,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            'Tap play to preview, select to apply',
+            appStr(lang, 'voice_preview_hint'),
             style: TextStyle(
-              color: Colors.white.withOpacity(0.45),
+              color: subTextColor,
               fontSize: 12,
             ),
           ),
@@ -1264,10 +1308,11 @@ class _VoiceSelectionSheetState extends State<_VoiceSelectionSheet> {
             final isLoading = _loadingSpeaker == id;
             return _VoiceTile(
               name: v['name'] as String,
-              desc: v['desc'] as String,
+              desc: appStr(lang, v['descKey'] as String),
               gender: v['gender'] as String,
               isSelected: isSelected,
               isLoading: isLoading,
+              isDark: isDark,
               onPreview: () => _previewVoice(id),
               onSelect: () {
                 widget.parentRef
@@ -1290,6 +1335,7 @@ class _VoiceTile extends StatelessWidget {
   final String gender;
   final bool isSelected;
   final bool isLoading;
+  final bool isDark;
   final VoidCallback onPreview;
   final VoidCallback onSelect;
 
@@ -1301,10 +1347,13 @@ class _VoiceTile extends StatelessWidget {
     required this.isLoading,
     required this.onPreview,
     required this.onSelect,
+    this.isDark = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final textColor = isDark ? Colors.white : AppColors.textPrimary;
+    final subTextColor = isDark ? Colors.white.withOpacity(0.45) : AppColors.textSecondary;
     return GestureDetector(
       onTap: onSelect,
       child: Container(
@@ -1313,12 +1362,12 @@ class _VoiceTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: isSelected
               ? AppColors.primary.withOpacity(0.12)
-              : Colors.white.withOpacity(0.04),
+              : (isDark ? Colors.white : Colors.black).withOpacity(0.04),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected
                 ? AppColors.primary.withOpacity(0.4)
-                : Colors.white.withOpacity(0.06),
+                : (isDark ? Colors.white : Colors.black).withOpacity(0.06),
           ),
         ),
         child: Row(
@@ -1347,13 +1396,13 @@ class _VoiceTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(name,
-                      style: const TextStyle(
-                          color: Colors.white,
+                      style: TextStyle(
+                          color: textColor,
                           fontSize: 14,
                           fontWeight: FontWeight.w600)),
                   Text(desc,
                       style: TextStyle(
-                          color: Colors.white.withOpacity(0.45),
+                          color: subTextColor,
                           fontSize: 12)),
                 ],
               ),
@@ -1365,7 +1414,7 @@ class _VoiceTile extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.08),
+                  color: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
                   shape: BoxShape.circle,
                 ),
                 child: isLoading
@@ -1373,11 +1422,11 @@ class _VoiceTile extends StatelessWidget {
                         padding: const EdgeInsets.all(8),
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white.withOpacity(0.5),
+                          color: textColor.withOpacity(0.5),
                         ),
                       )
                     : Icon(Icons.play_arrow_rounded,
-                        color: Colors.white.withOpacity(0.7), size: 18),
+                        color: textColor.withOpacity(0.7), size: 18),
               ),
             ),
             const SizedBox(width: 8),
@@ -1387,7 +1436,7 @@ class _VoiceTile extends StatelessWidget {
                   color: AppColors.primary, size: 22)
             else
               Icon(Icons.circle_outlined,
-                  color: Colors.white.withOpacity(0.2), size: 22),
+                  color: textColor.withOpacity(0.2), size: 22),
           ],
         ),
       ),
