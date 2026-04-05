@@ -1,15 +1,19 @@
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, EmailStr
+from datetime import datetime, timezone
 from app.database import get_supabase
 from app.auth import hash_password, verify_password, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_TERMS_VERSION = "1.0"
 
 
 class SignUpRequest(BaseModel):
     email: EmailStr
     password: str
     full_name: str
+    terms_signature: str
 
 
 class LoginRequest(BaseModel):
@@ -27,6 +31,12 @@ class AuthResponse(BaseModel):
 async def signup(body: SignUpRequest):
     db = get_supabase()
 
+    if not body.terms_signature.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Terms and conditions must be accepted with a signature",
+        )
+
     # Check if email already exists
     existing = db.table("users").select("id").eq("email", body.email).execute()
     if existing.data:
@@ -43,6 +53,10 @@ async def signup(body: SignUpRequest):
                 "email": body.email,
                 "password_hash": hashed,
                 "full_name": body.full_name,
+                "terms_accepted": True,
+                "terms_accepted_at": datetime.now(timezone.utc).isoformat(),
+                "terms_version": _TERMS_VERSION,
+                "terms_signature": body.terms_signature.strip(),
             }
         )
         .execute()

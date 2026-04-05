@@ -238,3 +238,13 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ai_summary JSONB;
 -- INSERT INTO storage.buckets (id, name, public, file_size_limit)
 -- VALUES ('pdfs', 'pdfs', true, 10485760)   -- 10 MB limit
 -- ON CONFLICT (id) DO NOTHING;
+
+-- ────────────────────────────────────────────────────────────
+-- 14. MIGRATION: Terms & Conditions consent tracking
+-- ────────────────────────────────────────────────────────────
+-- Run in Supabase SQL Editor if the users table already exists:
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted      BOOLEAN   DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at   TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version       TEXT      DEFAULT '1.0';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_signature     TEXT;

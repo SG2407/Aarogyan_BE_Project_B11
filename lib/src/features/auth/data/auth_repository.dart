@@ -11,11 +11,13 @@ class AuthRepository {
     required String email,
     required String password,
     required String fullName,
+    required String termsSignature,
   }) async {
     final response = await _dio.post('/auth/signup', data: {
       'email': email,
       'password': password,
       'full_name': fullName,
+      'terms_signature': termsSignature,
     });
     final data = response.data as Map<String, dynamic>;
     await TokenStorage.saveToken(data['access_token'], data['user_id']);

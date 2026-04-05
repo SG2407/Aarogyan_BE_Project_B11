@@ -48,12 +48,17 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     required String email,
     required String password,
     required String fullName,
+    required String termsSignature,
   }) async {
     state = const AsyncLoading();
     try {
       final repo = ref.read(authRepositoryProvider);
       final data = await repo.signUp(
-          email: email, password: password, fullName: fullName);
+        email: email,
+        password: password,
+        fullName: fullName,
+        termsSignature: termsSignature,
+      );
       state = AsyncData(
         AuthState(status: AuthStatus.authenticated, userId: data['user_id']),
       );
