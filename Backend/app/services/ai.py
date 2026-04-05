@@ -349,6 +349,75 @@ async def summarise_document(ocr_text: str) -> dict:
         }
 
 
+_SESSION_SUMMARY_SYSTEM = """\
+You are a medical record analyst for Aarogyan health app.
+Given a consultation session (symptoms, diagnosis, medications, doctor notes), generate a
+concise structured summary to help doctors quickly understand the session.
+
+Respond ONLY with valid JSON — no explanation, no extra text:
+{
+  "key_symptoms": ["list of main symptoms reported"],
+  "treatment_given": "Brief description of treatment or medications prescribed",
+  "important_findings": ["Any important clinical notes or findings"],
+  "progression": "one of: improving | worsening | unchanged | first_visit",
+  "summary": "2-3 sentence plain-language summary of this session for a doctor"
+}
+
+Rules:
+- Only include information actually present in the session data
+- If a field has no data, use an empty list [] or empty string ""
+- Do NOT invent or infer medical information not present in the data
+- Keep "summary" readable, factual, and under 3 sentences
+"""
+
+
+async def generate_session_summary(session: dict) -> dict:
+    """Generate a structured AI summary for a single consultation session.
+    Returns a dict with keys: key_symptoms, treatment_given, important_findings,
+    progression, summary.
+    """
+    parts = []
+    if session.get("visit_date"):
+        parts.append(f"Visit Date: {session['visit_date']}")
+    if session.get("symptoms"):
+        parts.append(f"Symptoms: {session['symptoms']}")
+    if session.get("diagnosis"):
+        parts.append(f"Diagnosis: {session['diagnosis']}")
+    if session.get("medications"):
+        parts.append(f"Medications: {session['medications']}")
+    if session.get("doctor_notes"):
+        parts.append(f"Doctor Notes: {session['doctor_notes']}")
+
+    if not parts:
+        return {
+            "key_symptoms": [],
+            "treatment_given": "",
+            "important_findings": [],
+            "progression": "first_visit",
+            "summary": "No session details recorded.",
+        }
+
+    content = "\n".join(parts)
+    messages = [{"role": "user", "content": f"Summarise this consultation session:\n\n{content}"}]
+    try:
+        raw = await _call_groq(messages, _SESSION_SUMMARY_SYSTEM, temperature=0.1)
+        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = json.loads(cleaned)
+        if not isinstance(data.get("key_symptoms"), list):
+            data["key_symptoms"] = []
+        if not isinstance(data.get("important_findings"), list):
+            data["important_findings"] = []
+        return data
+    except Exception as e:
+        logger.warning("Session summary generation failed: %s", e)
+        return {
+            "key_symptoms": [],
+            "treatment_given": "",
+            "important_findings": [],
+            "progression": "first_visit",
+            "summary": "Summary could not be generated.",
+        }
+
 
 # Patterns that should never appear in the spoken buddy reply.
 # Used to strip leaked metadata from the LLM output.

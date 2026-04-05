@@ -7,6 +7,7 @@ from typing import Optional, List
 from app.database import get_supabase
 from app.auth import get_current_user_id
 from app.services.ocr import extract_text_from_file
+from app.services.consultation_pdf_service import trigger_pdf_rebuild
 
 router = APIRouter(prefix="/consultations/{consultation_id}/sessions", tags=["sessions"])
 
@@ -73,6 +74,7 @@ async def create_session(
     result = db.table("sessions").insert(payload).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create session")
+    trigger_pdf_rebuild(consultation_id)
     return result.data[0]
 
 
@@ -117,6 +119,7 @@ async def update_session(
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Session not found")
+    trigger_pdf_rebuild(consultation_id)
     return result.data[0]
 
 
@@ -129,6 +132,7 @@ async def delete_session(
     _verify_consultation_owner(consultation_id, user_id)
     db = get_supabase()
     db.table("sessions").delete().eq("id", session_id).eq("consultation_id", consultation_id).execute()
+    trigger_pdf_rebuild(consultation_id)
 
 
 @router.post("/{session_id}/documents", status_code=status.HTTP_201_CREATED)
@@ -183,6 +187,7 @@ async def upload_document(
         .execute()
     )
 
+    trigger_pdf_rebuild(consultation_id)
     return result.data[0] if result.data else {"storage_path": storage_path}
 
 
@@ -199,3 +204,4 @@ async def delete_document(
     if doc.data:
         db.storage.from_("documents").remove([doc.data[0]["storage_path"]])
     db.table("session_documents").delete().eq("id", document_id).execute()
+    trigger_pdf_rebuild(consultation_id)

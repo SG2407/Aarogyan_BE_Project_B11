@@ -68,9 +68,19 @@ class ConsultationDetailScreen extends ConsumerWidget {
   void _exportPdf(BuildContext context, WidgetRef ref) async {
     final repo = ref.read(consultationRepositoryProvider);
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Generating PDF...')),
-    );
+
+    // Show a context-aware message based on whether a pre-built PDF is ready
+    final consultationAsync =
+        ref.read(consultationDetailProvider(consultationId));
+    final pdfStatus =
+        consultationAsync.valueOrNull?['pdf_status'] as String? ?? 'none';
+    final progressMessage = switch (pdfStatus) {
+      'ready' => 'Downloading PDF...',
+      'processing' => 'PDF is being prepared, please wait...',
+      _ => 'Generating PDF...',
+    };
+
+    messenger.showSnackBar(SnackBar(content: Text(progressMessage)));
     try {
       final path = await repo.exportPdf(consultationId);
       messenger.hideCurrentSnackBar();
@@ -208,8 +218,9 @@ class _DatePickerFieldState extends State<_DatePickerField> {
           lastDate: DateTime.now(),
           builder: (ctx, child) => Theme(
             data: Theme.of(ctx).copyWith(
-              colorScheme: Theme.of(ctx).colorScheme.copyWith(
-                  primary: AppColors.primary),
+              colorScheme: Theme.of(ctx)
+                  .colorScheme
+                  .copyWith(primary: AppColors.primary),
             ),
             child: child!,
           ),
@@ -287,7 +298,11 @@ class _SessionTile extends StatelessWidget {
                         Row(
                           children: [
                             Icon(Icons.attach_file_rounded,
-                                size: 14, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                                size: 14,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.5)),
                             const SizedBox(width: 4),
                             Text('$docs document${docs > 1 ? 's' : ''}',
                                 style: Theme.of(context)
@@ -301,7 +316,11 @@ class _SessionTile extends StatelessWidget {
                   ),
                 ),
                 Icon(Icons.arrow_forward_ios_rounded,
-                    size: 14, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                    size: 14,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5)),
               ],
             ),
           ),
@@ -324,7 +343,11 @@ class _EmptySessionsState extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.event_note_rounded,
-                size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                size: 64,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text('No sessions yet',
                 style: Theme.of(context).textTheme.headlineSmall),

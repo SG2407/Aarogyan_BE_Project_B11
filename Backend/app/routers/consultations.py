@@ -4,6 +4,7 @@ from typing import Optional
 from datetime import date as DateType
 from app.database import get_supabase
 from app.auth import get_current_user_id
+from app.services.consultation_pdf_service import trigger_pdf_rebuild
 
 router = APIRouter(prefix="/consultations", tags=["consultations"])
 
@@ -84,6 +85,7 @@ async def update_consultation(
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Consultation not found")
+    trigger_pdf_rebuild(consultation_id)
     return result.data[0]
 
 
@@ -93,4 +95,9 @@ async def delete_consultation(
     user_id: str = Depends(get_current_user_id),
 ):
     db = get_supabase()
+    # Clean up pre-built PDF from storage before deleting the record
+    try:
+        db.storage.from_("pdfs").remove([f"{consultation_id}/report.pdf"])
+    except Exception:
+        pass
     db.table("consultations").delete().eq("id", consultation_id).eq("user_id", user_id).execute()

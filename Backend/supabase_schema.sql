@@ -223,3 +223,18 @@ ALTER TABLE emotional_sessions DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE emotional_sessions ADD COLUMN IF NOT EXISTS session_group_id UUID;
 -- ALTER TABLE emotional_sessions ADD COLUMN IF NOT EXISTS emotion_probs JSONB;
 -- CREATE INDEX IF NOT EXISTS idx_emotional_sessions_group ON emotional_sessions (session_group_id);
+
+-- ────────────────────────────────────────────────────────────
+-- 13. MIGRATION: Pre-built PDF tracking + AI session summaries
+-- ────────────────────────────────────────────────────────────
+-- Run in Supabase SQL Editor if tables already exist:
+
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS pdf_status TEXT DEFAULT 'none';
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS pdf_path  TEXT;
+
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ai_summary JSONB;
+
+-- Storage bucket for pre-built PDFs (create via Supabase dashboard or SQL):
+-- INSERT INTO storage.buckets (id, name, public, file_size_limit)
+-- VALUES ('pdfs', 'pdfs', true, 10485760)   -- 10 MB limit
+-- ON CONFLICT (id) DO NOTHING;
