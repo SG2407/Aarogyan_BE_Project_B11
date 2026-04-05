@@ -9,26 +9,28 @@ from app.services.rag_pipeline import retrieve_context_rag
 logger = logging.getLogger(__name__)
 
 _ROUTER_SYSTEM = """\
-You are a query classifier for a medical RAG system.
-Classify the user query as either "General" or "Detailed".
+You are a query classifier for a medical AI assistant.
+Analyse the user query and return two classifications.
 
-Rules:
-- "Detailed": The query requires deep analysis, summarization of long content, or \
-complex cross-referencing across multiple topics or sections of a medical reference \
-(e.g. "Summarize the differences between Type 1 and Type 2 diabetes treatments over \
-the last decade.").
-- "General": The query asks a simple factual question, needs a definition, asks about \
-basic symptoms, or is general medical knowledge \
-(e.g. "What are the common symptoms of asthma?").
+1. "medical": true if the query is about health, wellness, medicine, symptoms, nutrition,
+   diet, exercise, mental wellness, or understanding medical documents.
+   false for everything else (coding, mathematics, history, entertainment, current events,
+   general trivia, science unrelated to health, etc.).
+
+2. "route": "Detailed" if the query requires deep analysis, summarization of long content,
+   or complex cross-referencing across multiple medical topics.
+   "General" for simple factual questions, definitions, basic symptoms, or general health
+   knowledge.
 
 Respond ONLY with valid JSON — no explanation, no extra text:
-{"route": "Detailed"}  or  {"route": "General"}
+{"medical": true, "route": "General"}
 """
 
 
-async def _route_query(query: str) -> bool:
-    """LLM router — returns True for Detailed (complex), False for General.
-    Defaults to False (General) on any failure.
+async def _route_query(query: str) -> tuple[bool, bool]:
+    """Combined medical + complexity classifier.
+    Returns (is_medical, is_complex).
+    Defaults to (True, False) on any failure — safe fallback treats query as medical.
     """
     try:
         raw = await _call_groq(
@@ -38,13 +40,17 @@ async def _route_query(query: str) -> bool:
         )
         # Strip markdown fences if the model wraps the JSON
         cleaned = raw.strip().strip("```json").strip("```").strip()
-        route = json.loads(cleaned).get("route", "General")
-        is_complex = route == "Detailed"
-        logger.info("LLM router: route=%s | query=%r", route, query[:80])
-        return is_complex
+        data = json.loads(cleaned)
+        is_medical = bool(data.get("medical", True))
+        is_complex = data.get("route", "General") == "Detailed"
+        logger.info(
+            "LLM router: medical=%s route=%s | query=%r",
+            is_medical, "Detailed" if is_complex else "General", query[:80],
+        )
+        return is_medical, is_complex
     except Exception as exc:
-        logger.warning("LLM router failed (%s) — defaulting to General", exc)
-        return False
+        logger.warning("LLM router failed (%s) — defaulting to medical=True, General", exc)
+        return True, False
 
 
 MEDICAL_ASSISTANT_SYSTEM = """You are Aarogyan's Medical Health Assistant — a supportive, knowledgeable, and empathetic AI health companion.
@@ -314,7 +320,10 @@ async def chat_with_ai(
     preferred_lang: str = "English",
 ) -> dict:
     """Returns {"reply": str, "sources": list[str]}."""
-    is_complex = await _route_query(user_message)
+    is_medical, is_complex = await _route_query(user_message)
+    if not is_medical:
+        logger.info("Query classified as non-medical — skipping RAG entirely")
+        return await _chat_plain(user_message, history, profile_context, preferred_lang=preferred_lang)
     return await _chat_with_rag(user_message, history, profile_context, is_complex=is_complex, preferred_lang=preferred_lang)
 
 

@@ -581,7 +581,6 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         profileAsync.valueOrNull?['preferred_language'] as String? ?? 'English';
 
     final convState = _toConvState(s.phase);
-    final displayText = s.lastReply ?? s.lastUserText ?? '';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scaffoldBg =
@@ -618,9 +617,6 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
                                       isDark: isDark),
                                   const SizedBox(height: 20),
                                   OrbWidget(state: convState, size: 200),
-                                  const SizedBox(height: 20),
-                                  _DisplayText(
-                                      text: displayText, isDark: isDark),
                                 ],
                               ),
                             ),

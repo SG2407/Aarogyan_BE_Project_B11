@@ -91,11 +91,28 @@ def _retrieve_sync(
         logger.info("Qdrant returned 0 hits for query: %r", query[:80])
         return "", []
 
-    logger.info("Qdrant returned %d hits for query: %r", len(hits), query[:80])
+    # Two-tier threshold:
+    # - CONTEXT: minimum score for a chunk to be used when answering the query.
+    # - SOURCE:  minimum score for the book name to be surfaced to the user.
+    #   Only very high-confidence matches (>=0.85) are shown as sources.
+    _CONTEXT_THRESHOLD = 0.45
+    _SOURCE_THRESHOLD = 0.85
+
+    context_hits = [h for h in hits if h.score >= _CONTEXT_THRESHOLD]
+    logger.info(
+        "Qdrant: %d context hits (>=%.2f), %d source hits (>=%.2f) for query: %r",
+        len(context_hits), _CONTEXT_THRESHOLD,
+        sum(1 for h in context_hits if h.score >= _SOURCE_THRESHOLD),
+        _SOURCE_THRESHOLD, query[:80],
+    )
+
+    if not context_hits:
+        logger.info("All hits below context threshold — returning empty context")
+        return "", []
 
     texts: list[str] = []
-    sources: list[str] = []
-    for hit in hits:
+    sources: list[str] = []   # empty string for hits below SOURCE_THRESHOLD
+    for hit in context_hits:
         payload = hit.payload
         # Text is stored inside _node_content as a LlamaIndex TextNode JSON
         raw_node = payload.get("_node_content", "")
@@ -106,8 +123,9 @@ def _retrieve_sync(
                 text = ""
         else:
             text = payload.get("text", "").strip()
-        # Use the PDF file name as the human-readable source
-        source = payload.get("file_name", payload.get("source", ""))
+        # Surface the book name only for very high-confidence hits
+        source = payload.get("file_name", payload.get("source", "")) \
+            if hit.score >= _SOURCE_THRESHOLD else ""
         texts.append(text)
         sources.append(source)
 
