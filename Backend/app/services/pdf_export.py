@@ -14,10 +14,11 @@ When these are absent the function gracefully degrades:
 import io
 import os
 import logging
-import httpx
 from fpdf import FPDF
 from datetime import datetime
 from typing import Any
+
+from app.database import get_supabase
 
 logger = logging.getLogger(__name__)
 
@@ -214,15 +215,12 @@ class AarogyanPDF(FPDF):
         self.ln(3)
 
 
-async def _fetch_image_bytes(url: str) -> bytes | None:
-    """Fetch a jpg/png from a URL. Returns None on failure."""
+def _download_from_storage(storage_path: str) -> bytes | None:
+    """Download a file from Supabase 'documents' bucket using service-role key."""
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-        return resp.content
+        return get_supabase().storage.from_("documents").download(storage_path)
     except Exception as e:
-        logger.warning("Could not fetch image from %s: %s", url, e)
+        logger.warning("Could not download from storage path %s: %s", storage_path, e)
         return None
 
 
@@ -286,18 +284,36 @@ async def generate_consultation_pdf(
 
                     # Pre-rendered image pages (from background enrichment)
                     image_pages: list[bytes] = doc.get("image_pages") or []
+                    storage_path = doc.get("storage_path") or ""
 
                     if image_pages:
                         pdf.embed_image_pages(image_pages, name)
-                    elif ext in (".jpg", ".jpeg", ".png") and url.startswith("https://"):
-                        # On-demand fallback: fetch image live
-                        img_bytes = await _fetch_image_bytes(url)
+                    elif ext in (".jpg", ".jpeg", ".png") and storage_path:
+                        # On-demand fallback: download directly from storage
+                        img_bytes = _download_from_storage(storage_path)
                         if img_bytes:
                             pdf.embed_image_pages([img_bytes], name)
                         else:
                             pdf.doc_link_row(name, url)
+                    elif ext == ".pdf" and storage_path:
+                        # On-demand PDF: render pages via PyMuPDF
+                        try:
+                            import fitz
+                            pdf_bytes_doc = _download_from_storage(storage_path)
+                            if pdf_bytes_doc:
+                                fitz_doc = fitz.open(stream=pdf_bytes_doc, filetype="pdf")
+                                pages = []
+                                for pg in fitz_doc:
+                                    pix = pg.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
+                                    pages.append(pix.tobytes("png"))
+                                fitz_doc.close()
+                                pdf.embed_image_pages(pages, name)
+                            else:
+                                pdf.doc_link_row(name, url)
+                        except Exception as e:
+                            logger.warning("On-demand PDF render failed for %s: %s", name, e)
+                            pdf.doc_link_row(name, url)
                     else:
-                        # PDF or other document without pre-rendered pages
                         pdf.doc_link_row(name, url)
 
                 pdf.set_text_color(26, 26, 46)

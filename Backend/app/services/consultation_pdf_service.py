@@ -25,8 +25,6 @@ import io
 import logging
 import threading
 
-import httpx
-
 from app.database import get_supabase
 from app.services.pdf_export import generate_consultation_pdf
 from app.services.ai import generate_session_summary
@@ -43,26 +41,24 @@ def _pdf_storage_path(consultation_id: str) -> str:
 # ── Document → image pages ────────────────────────────────────────────────────
 
 async def _fetch_document_images(doc: dict) -> list[bytes]:
-    """Fetch a document from its public URL and return PNG image bytes per page.
+    """Download a document from Supabase Storage (service-role) and return PNG image bytes per page.
 
     - Images (jpg/png) → returned as-is (single-element list)
     - PDFs            → each page rendered to PNG via PyMuPDF
     - Returns []      on any failure (graceful degradation)
     """
-    url = doc.get("public_url") or ""
+    storage_path = doc.get("storage_path") or ""
     content_type = doc.get("content_type") or ""
     name = doc.get("file_name") or ""
 
-    if not url.startswith("https://"):
+    if not storage_path:
         return []
 
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-        file_bytes = resp.content
+        db = get_supabase()
+        file_bytes: bytes = db.storage.from_("documents").download(storage_path)
     except Exception as exc:
-        logger.warning("Could not fetch document '%s': %s", name, exc)
+        logger.warning("Could not download document '%s' (path: %s): %s", name, storage_path, exc)
         return []
 
     # Images — return directly
