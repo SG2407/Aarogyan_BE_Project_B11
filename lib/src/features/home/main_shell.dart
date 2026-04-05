@@ -44,7 +44,10 @@ class MainShell extends ConsumerWidget {
           color: Theme.of(context).colorScheme.surface,
           boxShadow: [
             BoxShadow(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.06),
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.06),
               blurRadius: 16,
               offset: const Offset(0, -4),
             ),
@@ -80,7 +83,10 @@ class MainShell extends ConsumerWidget {
                             route.$2,
                             color: selected
                                 ? AppColors.primary
-                              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.5),
                             size: 24,
                           ),
                           const SizedBox(height: 2),
@@ -92,7 +98,10 @@ class MainShell extends ConsumerWidget {
                                   selected ? FontWeight.w600 : FontWeight.w400,
                               color: selected
                                   ? AppColors.primary
-                                  : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.5),
                             ),
                           ),
                         ],

@@ -175,7 +175,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     try {
       final repo = ref.read(profileRepositoryProvider);
       await repo.updateProfile({
-        if (_fullNameCtrl.text.isNotEmpty) 'full_name': _fullNameCtrl.text.trim(),
+        if (_fullNameCtrl.text.isNotEmpty)
+          'full_name': _fullNameCtrl.text.trim(),
         if (_dobCtrl.text.isNotEmpty) 'date_of_birth': _dobCtrl.text,
         if (_sex != null) 'biological_sex': _sex,
         if (_heightCtrl.text.isNotEmpty)
@@ -184,8 +185,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           'weight_kg': double.tryParse(_weightCtrl.text),
         if (_bloodGroup != null) 'blood_group': _bloodGroup,
         if (_cityCtrl.text.isNotEmpty) 'city': _cityCtrl.text.trim(),
-        if (_regionCtrl.text.isNotEmpty) 'region_state': _regionCtrl.text.trim(),
-        if (_preferredLanguage != null) 'preferred_language': _preferredLanguage,
+        if (_regionCtrl.text.isNotEmpty)
+          'region_state': _regionCtrl.text.trim(),
+        if (_preferredLanguage != null)
+          'preferred_language': _preferredLanguage,
         if (_emergencyNameCtrl.text.isNotEmpty)
           'emergency_contact_name': _emergencyNameCtrl.text.trim(),
         if (_emergencyPhoneCtrl.text.isNotEmpty)
@@ -241,9 +244,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         'mental_health': {
           if (_stressLevel != null) 'stress_level': _stressLevel,
           if (_anxietyLevel != null) 'anxiety_level': _anxietyLevel,
-          if (_depressionLevel != null) 'depression_screening': _depressionLevel,
+          if (_depressionLevel != null)
+            'depression_screening': _depressionLevel,
           if (_therapyOngoing != null) 'therapy_ongoing': _therapyOngoing,
-          if (_mentalNotesCtrl.text.isNotEmpty) 'notes': _mentalNotesCtrl.text.trim(),
+          if (_mentalNotesCtrl.text.isNotEmpty)
+            'notes': _mentalNotesCtrl.text.trim(),
         },
       });
       ref.invalidate(profileProvider);
@@ -309,8 +314,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             builder: (context, ref, _) {
               final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;
               return IconButton(
-                tooltip: isDark ? appStr(lang, 'switch_to_light') : appStr(lang, 'switch_to_dark'),
-                icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+                tooltip: isDark
+                    ? appStr(lang, 'switch_to_light')
+                    : appStr(lang, 'switch_to_dark'),
+                icon: Icon(isDark
+                    ? Icons.light_mode_rounded
+                    : Icons.dark_mode_rounded),
                 onPressed: () => ref.read(themeModeProvider.notifier).toggle(),
               );
             },
@@ -323,9 +332,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           // Personal
           SectionHeader(title: appStr(lang, 'personal_info')),
           const SizedBox(height: 12),
-          AppTextField(controller: _fullNameCtrl, label: appStr(lang, 'full_name')),
+          AppTextField(
+              controller: _fullNameCtrl, label: appStr(lang, 'full_name')),
           const SizedBox(height: 12),
-          _DateField(controller: _dobCtrl, label: appStr(lang, 'date_of_birth')),
+          _DateField(
+              controller: _dobCtrl, label: appStr(lang, 'date_of_birth')),
           const SizedBox(height: 12),
           _DropdownField(
             label: appStr(lang, 'biological_sex'),
@@ -356,9 +367,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: AppTextField(controller: _cityCtrl, label: appStr(lang, 'city'))),
+            Expanded(
+                child: AppTextField(
+                    controller: _cityCtrl, label: appStr(lang, 'city'))),
             const SizedBox(width: 12),
-            Expanded(child: AppTextField(controller: _regionCtrl, label: appStr(lang, 'state_region'))),
+            Expanded(
+                child: AppTextField(
+                    controller: _regionCtrl,
+                    label: appStr(lang, 'state_region'))),
           ]),
           const SizedBox(height: 12),
           _DropdownField(
@@ -440,8 +456,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             onChanged: (v) => setState(() => _activityLevel = v),
           ),
           const SizedBox(height: 12),
-          AppTextField(
-              controller: _dietCtrl, label: appStr(lang, 'diet_type')),
+          AppTextField(controller: _dietCtrl, label: appStr(lang, 'diet_type')),
           const SizedBox(height: 12),
           AppTextField(
               controller: _sleepCtrl,
@@ -530,14 +545,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: 32),
 
           AppButton(
-            label: _saving ? appStr(lang, 'saving') : appStr(lang, 'save_profile'),
+            label:
+                _saving ? appStr(lang, 'saving') : appStr(lang, 'save_profile'),
             onPressed: _saving ? null : _save,
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: _logout,
             icon: const Icon(Icons.logout, color: Colors.red),
-            label: Text(appStr(lang, 'log_out'), style: const TextStyle(color: Colors.red)),
+            label: Text(appStr(lang, 'log_out'),
+                style: const TextStyle(color: Colors.red)),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.red),
               minimumSize: const Size.fromHeight(48),
@@ -630,7 +647,9 @@ class _DateFieldState extends State<_DateField> {
           lastDate: DateTime.now(),
           builder: (ctx, child) => Theme(
             data: Theme.of(ctx).copyWith(
-              colorScheme: Theme.of(ctx).colorScheme.copyWith(primary: AppColors.primary),
+              colorScheme: Theme.of(ctx)
+                  .colorScheme
+                  .copyWith(primary: AppColors.primary),
             ),
             child: child!,
           ),

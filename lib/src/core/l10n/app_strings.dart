@@ -18,7 +18,8 @@ const Map<String, Map<String, String>> _strings = {
     'one_tap_hint': 'One tap — then just speak naturally',
     'pause_hint': 'Pause speaking for 5 s to send',
     'tap_interrupt': 'Tap to interrupt',
-    'service_starting': 'Service is starting up — please try again in a moment.',
+    'service_starting':
+        'Service is starting up — please try again in a moment.',
     'buddy_name': 'Buddy',
     'buddy_subtitle': 'Your Emotional Companion',
     'tap_to_start': 'Tap to start',
@@ -27,15 +28,20 @@ const Map<String, Map<String, String>> _strings = {
     'tips_subtitle': 'Tips for the best experience',
     'got_it': 'Got it',
     'tip_speak_title': 'Speak naturally',
-    'tip_speak_desc': 'Talk to Buddy like you would to a close friend. There\'s no right or wrong way to express yourself.',
+    'tip_speak_desc':
+        'Talk to Buddy like you would to a close friend. There\'s no right or wrong way to express yourself.',
     'tip_time_title': 'Take your time',
-    'tip_time_desc': 'Buddy waits for you — pauses while you think are fine. Speak when you\'re ready.',
+    'tip_time_desc':
+        'Buddy waits for you — pauses while you think are fine. Speak when you\'re ready.',
     'tip_lang_title': 'Use your language',
-    'tip_lang_desc': 'Speak in English, Hindi, or Marathi — Buddy understands and replies in the same language.',
+    'tip_lang_desc':
+        'Speak in English, Hindi, or Marathi — Buddy understands and replies in the same language.',
     'tip_honest_title': 'Be honest about feelings',
-    'tip_honest_desc': 'The more openly you share how you feel, the better Buddy can support you and track your emotional health accurately.',
+    'tip_honest_desc':
+        'The more openly you share how you feel, the better Buddy can support you and track your emotional health accurately.',
     'tip_tracker_title': 'Check your Tracker',
-    'tip_tracker_desc': 'Visit Mental Health Tracker to see mood trends, emotion patterns, and insights from your sessions.',
+    'tip_tracker_desc':
+        'Visit Mental Health Tracker to see mood trends, emotion patterns, and insights from your sessions.',
     'choose_voice': 'Choose a Voice',
     'voice_preview_hint': 'Tap play to preview, select to apply',
     'voice_warm_gentle': 'Warm & gentle',
@@ -74,7 +80,8 @@ const Map<String, Map<String, String>> _strings = {
     'feat_mental_sub': 'Your emotional well-being trends',
     // Assistant list screen
     'your_health_assistant': 'Your Health Assistant',
-    'assistant_desc': 'Ask questions about your health, understand your test reports, or get guidance on symptoms.',
+    'assistant_desc':
+        'Ask questions about your health, understand your test reports, or get guidance on symptoms.',
     'delete_chat_title': 'Delete chat?',
     'delete_chat_content': 'This conversation will be permanently deleted.',
     // Consultations screen
@@ -85,12 +92,14 @@ const Map<String, Map<String, String>> _strings = {
     'consult_start_date': 'Start Date (optional)',
     'create_consultation': 'Create Consultation',
     'no_consultations': 'No consultations yet',
-    'no_consultations_sub': 'Create your first consultation to start tracking your treatment journey.',
+    'no_consultations_sub':
+        'Create your first consultation to start tracking your treatment journey.',
     'delete_consultation': 'Delete Consultation',
     // Document screen
     'document_scanner': 'Document Scanner',
     'scan_a_document': 'Scan a Document',
-    'scan_desc': 'Upload a prescription, test report, discharge summary, or any health document. Our AI will explain what it means in simple words.',
+    'scan_desc':
+        'Upload a prescription, test report, discharge summary, or any health document. Our AI will explain what it means in simple words.',
     'camera': 'Camera',
     'choose_file': 'Choose File',
     'scan_another': 'Scan Another Document',
@@ -183,7 +192,8 @@ const Map<String, Map<String, String>> _strings = {
     'one_tap_hint': 'एक बार दबाएं — फिर स्वाभाविक रूप से बोलें',
     'pause_hint': '5 सेकंड रुकें तो भेजें',
     'tap_interrupt': 'बाधित करने के लिए दबाएं',
-    'service_starting': 'सेवा शुरू हो रही है — कृपया थोड़ी देर बाद पुनः प्रयास करें।',
+    'service_starting':
+        'सेवा शुरू हो रही है — कृपया थोड़ी देर बाद पुनः प्रयास करें।',
     'buddy_name': 'बडी',
     'buddy_subtitle': 'आपका भावनात्मक साथी',
     'tap_to_start': 'शुरू करने के लिए दबाएं',
@@ -192,17 +202,23 @@ const Map<String, Map<String, String>> _strings = {
     'tips_subtitle': 'सबसे अच्छे अनुभव के लिए सुझाव',
     'got_it': 'समझ गया',
     'tip_speak_title': 'स्वाभाविक रूप से बोलें',
-    'tip_speak_desc': 'बडी से ऐसे बात करें जैसे किसी करीबी दोस्त से करते हैं। खुद को व्यक्त करने का कोई सही या गलत तरीका नहीं है।',
+    'tip_speak_desc':
+        'बडी से ऐसे बात करें जैसे किसी करीबी दोस्त से करते हैं। खुद को व्यक्त करने का कोई सही या गलत तरीका नहीं है।',
     'tip_time_title': 'अपना समय लें',
-    'tip_time_desc': 'बडी आपका इंतज़ार करता है — सोचते समय रुकना ठीक है। जब तैयार हों तब बोलें।',
+    'tip_time_desc':
+        'बडी आपका इंतज़ार करता है — सोचते समय रुकना ठीक है। जब तैयार हों तब बोलें।',
     'tip_lang_title': 'अपनी भाषा का उपयोग करें',
-    'tip_lang_desc': 'अंग्रेज़ी, हिंदी या मराठी में बोलें — बडी समझता है और उसी भाषा में जवाब देता है।',
+    'tip_lang_desc':
+        'अंग्रेज़ी, हिंदी या मराठी में बोलें — बडी समझता है और उसी भाषा में जवाब देता है।',
     'tip_honest_title': 'भावनाओं के बारे में ईमानदार रहें',
-    'tip_honest_desc': 'आप जितना खुलकर साझा करेंगे, बडी उतना बेहतर सहयोग और सटीक भावनात्मक स्वास्थ्य ट्रैकिंग कर पाएगा।',
+    'tip_honest_desc':
+        'आप जितना खुलकर साझा करेंगे, बडी उतना बेहतर सहयोग और सटीक भावनात्मक स्वास्थ्य ट्रैकिंग कर पाएगा।',
     'tip_tracker_title': 'अपना ट्रैकर देखें',
-    'tip_tracker_desc': 'मूड ट्रेंड, भावना पैटर्न और सत्र अंतर्दृष्टि देखने के लिए मानसिक स्वास्थ्य ट्रैकर पर जाएं।',
+    'tip_tracker_desc':
+        'मूड ट्रेंड, भावना पैटर्न और सत्र अंतर्दृष्टि देखने के लिए मानसिक स्वास्थ्य ट्रैकर पर जाएं।',
     'choose_voice': 'आवाज़ चुनें',
-    'voice_preview_hint': 'पूर्वावलोकन के लिए प्ले दबाएं, लागू करने के लिए चुनें',
+    'voice_preview_hint':
+        'पूर्वावलोकन के लिए प्ले दबाएं, लागू करने के लिए चुनें',
     'voice_warm_gentle': 'गर्मजोशी और कोमल',
     'voice_calm_soothing': 'शांत और सुखदायक',
     'voice_soft_empathetic': 'नरम और सहानुभूतिपूर्ण',
@@ -239,7 +255,8 @@ const Map<String, Map<String, String>> _strings = {
     'feat_mental_sub': 'आपके भावनात्मक कल्याण के रुझान',
     // Assistant list screen
     'your_health_assistant': 'आपका स्वास्थ्य सहायक',
-    'assistant_desc': 'अपने स्वास्थ्य के बारे में सवाल पूछें, अपनी टेस्ट रिपोर्ट समझें, या लक्षणों पर मार्गदर्शन प्राप्त करें।',
+    'assistant_desc':
+        'अपने स्वास्थ्य के बारे में सवाल पूछें, अपनी टेस्ट रिपोर्ट समझें, या लक्षणों पर मार्गदर्शन प्राप्त करें।',
     'delete_chat_title': 'चैट हटाएं?',
     'delete_chat_content': 'यह वार्तालाप स्थायी रूप से हटा दिया जाएगा।',
     // Consultations screen
@@ -250,12 +267,14 @@ const Map<String, Map<String, String>> _strings = {
     'consult_start_date': 'शुरू की तारीख (वैकल्पिक)',
     'create_consultation': 'परामर्श बनाएं',
     'no_consultations': 'अभी तक कोई परामर्श नहीं',
-    'no_consultations_sub': 'अपना उपचार सफर ट्रैक करने के लिए पहला परामर्श बनाएं।',
+    'no_consultations_sub':
+        'अपना उपचार सफर ट्रैक करने के लिए पहला परामर्श बनाएं।',
     'delete_consultation': 'परामर्श हटाएं',
     // Document screen
     'document_scanner': 'दस्तावेज़ स्कैनर',
     'scan_a_document': 'दस्तावेज़ स्कैन करें',
-    'scan_desc': 'कोई भी स्वास्थ्य दस्तावेज़ अपलोड करें। हमारी AI इसे सरल भाषा में समझाएगी।',
+    'scan_desc':
+        'कोई भी स्वास्थ्य दस्तावेज़ अपलोड करें। हमारी AI इसे सरल भाषा में समझाएगी।',
     'camera': 'कैमरा',
     'choose_file': 'फ़ाइल चुनें',
     'scan_another': 'एक और दस्तावेज़ स्कैन करें',
@@ -348,7 +367,8 @@ const Map<String, Map<String, String>> _strings = {
     'one_tap_hint': 'एकदा दाबा — मग नैसर्गिकपणे बोला',
     'pause_hint': 'पाठवण्यासाठी 5 सेकंड थांबा',
     'tap_interrupt': 'व्यत्यय आणण्यासाठी दाबा',
-    'service_starting': 'सेवा सुरू होत आहे — कृपया थोड़ा वेळ थांबून पुन्हा प्रयत्न करा।',
+    'service_starting':
+        'सेवा सुरू होत आहे — कृपया थोड़ा वेळ थांबून पुन्हा प्रयत्न करा।',
     'buddy_name': 'बडी',
     'buddy_subtitle': 'तुमचा भावनिक साथीदार',
     'tap_to_start': 'सुरू करण्यासाठी दाबा',
@@ -357,15 +377,20 @@ const Map<String, Map<String, String>> _strings = {
     'tips_subtitle': 'उत्तम अनुभवासाठी टिप्स',
     'got_it': 'समजले',
     'tip_speak_title': 'नैसर्गिकपणे बोला',
-    'tip_speak_desc': 'बडीशी जवळच्या मित्रासारखे बोला. स्वतःला व्यक्त करण्याचा कोणताही बरोबर किंवा चुकीचा मार्ग नाही.',
+    'tip_speak_desc':
+        'बडीशी जवळच्या मित्रासारखे बोला. स्वतःला व्यक्त करण्याचा कोणताही बरोबर किंवा चुकीचा मार्ग नाही.',
     'tip_time_title': 'आपला वेळ घ्या',
-    'tip_time_desc': 'बडी तुमची वाट पाहतो — विचार करताना थांबणे ठीक आहे. तयार असाल तेव्हा बोला.',
+    'tip_time_desc':
+        'बडी तुमची वाट पाहतो — विचार करताना थांबणे ठीक आहे. तयार असाल तेव्हा बोला.',
     'tip_lang_title': 'तुमची भाषा वापरा',
-    'tip_lang_desc': 'इंग्रजी, हिंदी किंवा मराठीत बोला — बडी समजतो आणि त्याच भाषेत उत्तर देतो.',
+    'tip_lang_desc':
+        'इंग्रजी, हिंदी किंवा मराठीत बोला — बडी समजतो आणि त्याच भाषेत उत्तर देतो.',
     'tip_honest_title': 'भावनांबद्दल प्रामाणिक राहा',
-    'tip_honest_desc': 'तुम्ही जितके मोकळेपणाने सांगाल, तितके बडी तुम्हाला अधिक चांगले सहकार्य आणि अचूक भावनिक आरोग्य ट्रॅकिंग करू शकेल.',
+    'tip_honest_desc':
+        'तुम्ही जितके मोकळेपणाने सांगाल, तितके बडी तुम्हाला अधिक चांगले सहकार्य आणि अचूक भावनिक आरोग्य ट्रॅकिंग करू शकेल.',
     'tip_tracker_title': 'तुमचा ट्रॅकर पहा',
-    'tip_tracker_desc': 'मूड ट्रेंड, भावना पॅटर्न आणि सत्र अंतर्दृष्टी पाहण्यासाठी मानसिक आरोग्य ट्रॅकरला भेट द्या.',
+    'tip_tracker_desc':
+        'मूड ट्रेंड, भावना पॅटर्न आणि सत्र अंतर्दृष्टी पाहण्यासाठी मानसिक आरोग्य ट्रॅकरला भेट द्या.',
     'choose_voice': 'आवाज निवडा',
     'voice_preview_hint': 'पूर्वावलोकनासाठी प्ले दाबा, लागू करण्यासाठी निवडा',
     'voice_warm_gentle': 'उबदार आणि सौम्य',
@@ -404,7 +429,8 @@ const Map<String, Map<String, String>> _strings = {
     'feat_mental_sub': 'तुमच्या भावनिक आरोग्याचे ट्रेंड',
     // Assistant list screen
     'your_health_assistant': 'तुमचा आरोग्य सहाय्यक',
-    'assistant_desc': 'तुमच्या आरोग्याबद्दल प्रश्न विचारा, चाचणी अहवाल समजून घ्या, किंवा लक्षणांवर मार्गदर्शन मिळवा.',
+    'assistant_desc':
+        'तुमच्या आरोग्याबद्दल प्रश्न विचारा, चाचणी अहवाल समजून घ्या, किंवा लक्षणांवर मार्गदर्शन मिळवा.',
     'delete_chat_title': 'चॅट हटवायचा?',
     'delete_chat_content': 'हे संभाषण कायमचे हटवले जाईल.',
     // Consultations screen
@@ -415,12 +441,14 @@ const Map<String, Map<String, String>> _strings = {
     'consult_start_date': 'सुरू होण्याची तारीख (पर्यायी)',
     'create_consultation': 'सल्लामसलत तयार करा',
     'no_consultations': 'अद्याप कोणतीही सल्लामसलत नाही',
-    'no_consultations_sub': 'तुमचा उपचार प्रवास ट्रॅक करण्यासाठी पहिली सल्लामसलत तयार करा.',
+    'no_consultations_sub':
+        'तुमचा उपचार प्रवास ट्रॅक करण्यासाठी पहिली सल्लामसलत तयार करा.',
     'delete_consultation': 'सल्लामसलत हटवा',
     // Document screen
     'document_scanner': 'दस्तऐवज स्कॅनर',
     'scan_a_document': 'दस्तऐवज स्कॅन करा',
-    'scan_desc': 'कोणताही आरोग्य दस्तऐवज अपलोड करा. आमची AI ते सोप्या शब्दांत समजावेल.',
+    'scan_desc':
+        'कोणताही आरोग्य दस्तऐवज अपलोड करा. आमची AI ते सोप्या शब्दांत समजावेल.',
     'camera': 'कॅमेरा',
     'choose_file': 'फाइल निवडा',
     'scan_another': 'आणखी एक दस्तऐवज स्कॅन करा',
@@ -450,7 +478,8 @@ const Map<String, Map<String, String>> _strings = {
     'switch_to_dark': 'डार्क मोड',
     'personal_info': 'वैयक्तिक माहिती',
     'emergency_contact': 'आपत्कालीन संपर्क',
-    'emergency_contact_sub': 'वैद्यकीय आपत्कालीन परिस्थितीत कोणाशी संपर्क साधायचा?',
+    'emergency_contact_sub':
+        'वैद्यकीय आपत्कालीन परिस्थितीत कोणाशी संपर्क साधायचा?',
     'medical_history': 'वैद्यकीय इतिहास',
     'lifestyle': 'जीवनशैली',
     'current_medications': 'सध्याची औषधे',

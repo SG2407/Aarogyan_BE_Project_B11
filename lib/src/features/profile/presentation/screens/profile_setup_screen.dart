@@ -68,7 +68,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
     try {
       final data = <String, dynamic>{};
-      if (_fullNameCtrl.text.isNotEmpty) data['full_name'] = _fullNameCtrl.text.trim();
+      if (_fullNameCtrl.text.isNotEmpty)
+        data['full_name'] = _fullNameCtrl.text.trim();
       if (_dobCtrl.text.isNotEmpty) data['date_of_birth'] = _dobCtrl.text;
       if (_sex != null) data['biological_sex'] = _sex;
       if (_heightCtrl.text.isNotEmpty)
@@ -77,8 +78,10 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         data['weight_kg'] = double.tryParse(_weightCtrl.text);
       if (_bloodGroup != null) data['blood_group'] = _bloodGroup;
       if (_cityCtrl.text.isNotEmpty) data['city'] = _cityCtrl.text.trim();
-      if (_regionCtrl.text.isNotEmpty) data['region_state'] = _regionCtrl.text.trim();
-      if (_preferredLanguage != null) data['preferred_language'] = _preferredLanguage;
+      if (_regionCtrl.text.isNotEmpty)
+        data['region_state'] = _regionCtrl.text.trim();
+      if (_preferredLanguage != null)
+        data['preferred_language'] = _preferredLanguage;
       if (_emergencyNameCtrl.text.isNotEmpty)
         data['emergency_contact_name'] = _emergencyNameCtrl.text.trim();
       if (_emergencyPhoneCtrl.text.isNotEmpty)
@@ -108,7 +111,11 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
           TextButton(
             onPressed: () => context.go('/home'),
             child: Text('Skip',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5))),
+                style: TextStyle(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5))),
           ),
         ],
       ),
@@ -261,8 +268,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
           lastDate: DateTime.now(),
           builder: (ctx, child) => Theme(
             data: Theme.of(ctx).copyWith(
-              colorScheme: Theme.of(ctx).colorScheme.copyWith(
-                  primary: AppColors.primary),
+              colorScheme: Theme.of(ctx)
+                  .colorScheme
+                  .copyWith(primary: AppColors.primary),
             ),
             child: child!,
           ),

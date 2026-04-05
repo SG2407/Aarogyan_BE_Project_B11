@@ -37,11 +37,23 @@ class HomeScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          appStr(lang, 'home_welcome'),
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
+        Row(
+          children: [
+            Image.asset(
+              'assets/images/transparent_logo.png',
+              height: 32,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              appStr(lang, 'home_welcome'),
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5),
+                  ),
+            ),
+          ],
         ),
         Text(
           'Aarogyan 🌿',
@@ -234,7 +246,11 @@ class _FeatureCard extends StatelessWidget {
               ),
             ),
             Icon(Icons.arrow_forward_ios_rounded,
-                size: 16, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                size: 16,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.5)),
           ],
         ),
       ),

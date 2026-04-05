@@ -21,14 +21,16 @@ class ConsultationsScreen extends ConsumerWidget {
         onPressed: () => _showCreateDialog(context, ref),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: Text(appStr(lang, 'new_label'), style: const TextStyle(color: Colors.white)),
+        label: Text(appStr(lang, 'new_label'),
+            style: const TextStyle(color: Colors.white)),
       ),
       body: consultationsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (list) {
           if (list.isEmpty) {
-            return _EmptyState(lang: lang, onAdd: () => _showCreateDialog(context, ref));
+            return _EmptyState(
+                lang: lang, onAdd: () => _showCreateDialog(context, ref));
           }
           return ListView.builder(
             padding: const EdgeInsets.all(20),
@@ -99,8 +101,9 @@ class ConsultationsScreen extends ConsumerWidget {
                     lastDate: DateTime.now(),
                     builder: (c, child) => Theme(
                       data: Theme.of(c).copyWith(
-                        colorScheme: Theme.of(c).colorScheme.copyWith(
-                            primary: AppColors.primary),
+                        colorScheme: Theme.of(c)
+                            .colorScheme
+                            .copyWith(primary: AppColors.primary),
                       ),
                       child: child!,
                     ),
@@ -120,14 +123,20 @@ class ConsultationsScreen extends ConsumerWidget {
                   child: Row(
                     children: [
                       Icon(Icons.calendar_today_outlined,
-                          color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
+                          color: Theme.of(ctx)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.5)),
                       const SizedBox(width: 12),
                       Text(
                         startDate ?? appStr(lang, 'consult_start_date'),
                         style: TextStyle(
                           color: startDate != null
                               ? Theme.of(ctx).colorScheme.onSurface
-                              : Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5),
+                              : Theme.of(ctx)
+                                  .colorScheme
+                                  .onSurface
+                                  .withValues(alpha: 0.5),
                         ),
                       ),
                     ],
@@ -234,7 +243,8 @@ class _ConsultationCard extends StatelessWidget {
                           TextButton(
                               onPressed: () => Navigator.pop(ctx, true),
                               child: Text(appStr(lang, 'delete'),
-                                  style: const TextStyle(color: AppColors.error))),
+                                  style:
+                                      const TextStyle(color: AppColors.error))),
                         ],
                       ),
                     );
@@ -242,7 +252,11 @@ class _ConsultationCard extends StatelessWidget {
                   },
                 ),
                 Icon(Icons.arrow_forward_ios_rounded,
-                    size: 14, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                    size: 14,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5)),
               ],
             ),
           ),

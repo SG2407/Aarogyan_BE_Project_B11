@@ -26,7 +26,8 @@ class AssistantScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (list) {
           if (list.isEmpty) {
-            return _EmptyState(lang: lang, onNew: () => _startNewChat(context, ref));
+            return _EmptyState(
+                lang: lang, onNew: () => _startNewChat(context, ref));
           }
           return ListView.separated(
             padding: const EdgeInsets.all(20),
@@ -148,14 +149,15 @@ class _ConversationTile extends StatelessWidget {
         content: Text(appStr(lang, 'delete_chat_content')),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: Text(appStr(lang, 'cancel'))),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(appStr(lang, 'cancel'))),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               onDelete();
             },
-            child:
-                Text(appStr(lang, 'delete'), style: const TextStyle(color: AppColors.error)),
+            child: Text(appStr(lang, 'delete'),
+                style: const TextStyle(color: AppColors.error)),
           ),
         ],
       ),

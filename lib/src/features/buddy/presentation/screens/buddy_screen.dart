@@ -209,7 +209,8 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
     _vad.onVADMisfire.listen((_) {
       if (_disposed || !state.conversationActive || _processing) return;
       debugPrint('[Buddy] VAD: misfire');
-      if (_pendingSamples.isNotEmpty && !(_postSpeechTimer?.isActive ?? false)) {
+      if (_pendingSamples.isNotEmpty &&
+          !(_postSpeechTimer?.isActive ?? false)) {
         _startPostSpeechTimer();
       }
     });
@@ -352,8 +353,8 @@ class BuddyNotifier extends AutoDisposeNotifier<BuddyStateData> {
       _processing = false;
       _pendingSamples.clear();
       if (!_disposed && state.conversationActive) {
-        _set(state.copyWith(
-            phase: BuddyPhase.idle, error: 'Processing error.'));
+        _set(
+            state.copyWith(phase: BuddyPhase.idle, error: 'Processing error.'));
         await Future.delayed(const Duration(seconds: 2));
         await _startVadListening();
       }
@@ -583,7 +584,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     final displayText = s.lastReply ?? s.lastUserText ?? '';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final scaffoldBg = isDark ? const Color(0xFF071412) : const Color(0xFFF7FAF9);
+    final scaffoldBg =
+        isDark ? const Color(0xFF071412) : const Color(0xFFF7FAF9);
 
     return Scaffold(
       backgroundColor: scaffoldBg,
@@ -599,7 +601,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
                   builder: (context, constraints) {
                     return Column(
                       children: [
-                        _buildTopBar(context, notifier, s, preferredLang, isDark),
+                        _buildTopBar(
+                            context, notifier, s, preferredLang, isDark),
                         Expanded(
                           child: SingleChildScrollView(
                             child: ConstrainedBox(
@@ -609,11 +612,15 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  _StateLabel(state: convState, lang: preferredLang, isDark: isDark),
+                                  _StateLabel(
+                                      state: convState,
+                                      lang: preferredLang,
+                                      isDark: isDark),
                                   const SizedBox(height: 20),
                                   OrbWidget(state: convState, size: 200),
                                   const SizedBox(height: 20),
-                                  _DisplayText(text: displayText, isDark: isDark),
+                                  _DisplayText(
+                                      text: displayText, isDark: isDark),
                                 ],
                               ),
                             ),
@@ -651,8 +658,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     );
   }
 
-  Widget _buildTopBar(
-      BuildContext context, BuddyNotifier notifier, BuddyStateData s, String lang, bool isDark) {
+  Widget _buildTopBar(BuildContext context, BuddyNotifier notifier,
+      BuddyStateData s, String lang, bool isDark) {
     final textColor = isDark ? Colors.white : AppColors.textPrimary;
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
@@ -704,12 +711,14 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     );
   }
 
-  void _showVoiceSelectionSheet(BuildContext context, WidgetRef ref, String lang, bool isDark) {
+  void _showVoiceSelectionSheet(
+      BuildContext context, WidgetRef ref, String lang, bool isDark) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _VoiceSelectionSheet(parentRef: ref, lang: lang, isDark: isDark),
+      builder: (_) =>
+          _VoiceSelectionSheet(parentRef: ref, lang: lang, isDark: isDark),
     );
   }
 }
@@ -757,7 +766,8 @@ class _StateLabel extends StatelessWidget {
   final ConversationState state;
   final String lang;
   final bool isDark;
-  const _StateLabel({required this.state, required this.lang, required this.isDark});
+  const _StateLabel(
+      {required this.state, required this.lang, required this.isDark});
 
   String get _label {
     switch (state) {
@@ -820,10 +830,12 @@ class _DisplayText extends StatelessWidget {
                   vertical: 14,
                 ),
                 decoration: BoxDecoration(
-                  color: (isDark ? Colors.white : Colors.black).withOpacity(0.07),
+                  color:
+                      (isDark ? Colors.white : Colors.black).withOpacity(0.07),
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
-                    color: (isDark ? Colors.white : Colors.black).withOpacity(0.1),
+                    color:
+                        (isDark ? Colors.white : Colors.black).withOpacity(0.1),
                     width: 1,
                   ),
                 ),
@@ -1004,7 +1016,8 @@ class _GlassIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final bool isDark;
-  const _GlassIconButton({required this.icon, required this.onTap, this.isDark = true});
+  const _GlassIconButton(
+      {required this.icon, required this.onTap, this.isDark = true});
 
   @override
   Widget build(BuildContext context) {
@@ -1032,32 +1045,32 @@ class _InstructionsDialog extends StatelessWidget {
   const _InstructionsDialog({required this.lang, required this.isDark});
 
   List<Map<String, dynamic>> _tips() => [
-    {
-      'icon': Icons.mic_rounded,
-      'titleKey': 'tip_speak_title',
-      'descKey': 'tip_speak_desc',
-    },
-    {
-      'icon': Icons.timer_rounded,
-      'titleKey': 'tip_time_title',
-      'descKey': 'tip_time_desc',
-    },
-    {
-      'icon': Icons.language_rounded,
-      'titleKey': 'tip_lang_title',
-      'descKey': 'tip_lang_desc',
-    },
-    {
-      'icon': Icons.emoji_emotions_rounded,
-      'titleKey': 'tip_honest_title',
-      'descKey': 'tip_honest_desc',
-    },
-    {
-      'icon': Icons.insights_rounded,
-      'titleKey': 'tip_tracker_title',
-      'descKey': 'tip_tracker_desc',
-    },
-  ];
+        {
+          'icon': Icons.mic_rounded,
+          'titleKey': 'tip_speak_title',
+          'descKey': 'tip_speak_desc',
+        },
+        {
+          'icon': Icons.timer_rounded,
+          'titleKey': 'tip_time_title',
+          'descKey': 'tip_time_desc',
+        },
+        {
+          'icon': Icons.language_rounded,
+          'titleKey': 'tip_lang_title',
+          'descKey': 'tip_lang_desc',
+        },
+        {
+          'icon': Icons.emoji_emotions_rounded,
+          'titleKey': 'tip_honest_title',
+          'descKey': 'tip_honest_desc',
+        },
+        {
+          'icon': Icons.insights_rounded,
+          'titleKey': 'tip_tracker_title',
+          'descKey': 'tip_tracker_desc',
+        },
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -1065,8 +1078,10 @@ class _InstructionsDialog extends StatelessWidget {
         ? const Color(0xFF0F1F1C).withOpacity(0.95)
         : Colors.white.withOpacity(0.97);
     final textColor = isDark ? Colors.white : AppColors.textPrimary;
-    final subTextColor = isDark ? Colors.white.withOpacity(0.45) : AppColors.textSecondary;
-    final borderColor = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08);
+    final subTextColor =
+        isDark ? Colors.white.withOpacity(0.45) : AppColors.textSecondary;
+    final borderColor =
+        isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08);
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -1121,8 +1136,8 @@ class _InstructionsDialog extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   child: Text(appStr(lang, 'got_it'),
-                      style:
-                          const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 15)),
                 ),
               ),
             ),
@@ -1140,7 +1155,10 @@ class _TipRow extends StatelessWidget {
   final String desc;
   final bool isDark;
   const _TipRow(
-      {required this.icon, required this.title, required this.desc, this.isDark = true});
+      {required this.icon,
+      required this.title,
+      required this.desc,
+      this.isDark = true});
 
   @override
   Widget build(BuildContext context) {
@@ -1191,7 +1209,8 @@ class _VoiceSelectionSheet extends StatefulWidget {
   final WidgetRef parentRef;
   final String lang;
   final bool isDark;
-  const _VoiceSelectionSheet({required this.parentRef, required this.lang, required this.isDark});
+  const _VoiceSelectionSheet(
+      {required this.parentRef, required this.lang, required this.isDark});
 
   @override
   State<_VoiceSelectionSheet> createState() => _VoiceSelectionSheetState();
@@ -1203,19 +1222,79 @@ class _VoiceSelectionSheetState extends State<_VoiceSelectionSheet> {
 
   static const _voices = [
     // Female
-    {'id': 'priya', 'name': 'Priya', 'gender': 'female', 'descKey': 'voice_warm_gentle'},
-    {'id': 'simran', 'name': 'Simran', 'gender': 'female', 'descKey': 'voice_calm_soothing'},
-    {'id': 'kavya', 'name': 'Kavya', 'gender': 'female', 'descKey': 'voice_soft_empathetic'},
-    {'id': 'shreya', 'name': 'Shreya', 'gender': 'female', 'descKey': 'voice_clear_friendly'},
-    {'id': 'neha', 'name': 'Neha', 'gender': 'female', 'descKey': 'voice_bright_cheerful'},
-    {'id': 'roopa', 'name': 'Roopa', 'gender': 'female', 'descKey': 'voice_mature_comforting'},
+    {
+      'id': 'priya',
+      'name': 'Priya',
+      'gender': 'female',
+      'descKey': 'voice_warm_gentle'
+    },
+    {
+      'id': 'simran',
+      'name': 'Simran',
+      'gender': 'female',
+      'descKey': 'voice_calm_soothing'
+    },
+    {
+      'id': 'kavya',
+      'name': 'Kavya',
+      'gender': 'female',
+      'descKey': 'voice_soft_empathetic'
+    },
+    {
+      'id': 'shreya',
+      'name': 'Shreya',
+      'gender': 'female',
+      'descKey': 'voice_clear_friendly'
+    },
+    {
+      'id': 'neha',
+      'name': 'Neha',
+      'gender': 'female',
+      'descKey': 'voice_bright_cheerful'
+    },
+    {
+      'id': 'roopa',
+      'name': 'Roopa',
+      'gender': 'female',
+      'descKey': 'voice_mature_comforting'
+    },
     // Male
-    {'id': 'aditya', 'name': 'Aditya', 'gender': 'male', 'descKey': 'voice_calm_reassuring'},
-    {'id': 'kabir', 'name': 'Kabir', 'gender': 'male', 'descKey': 'voice_deep_grounding'},
-    {'id': 'anand', 'name': 'Anand', 'gender': 'male', 'descKey': 'voice_warm_supportive'},
-    {'id': 'rohan', 'name': 'Rohan', 'gender': 'male', 'descKey': 'voice_friendly_steady'},
-    {'id': 'dev', 'name': 'Dev', 'gender': 'male', 'descKey': 'voice_gentle_composed'},
-    {'id': 'rahul', 'name': 'Rahul', 'gender': 'male', 'descKey': 'voice_warm_natural'},
+    {
+      'id': 'aditya',
+      'name': 'Aditya',
+      'gender': 'male',
+      'descKey': 'voice_calm_reassuring'
+    },
+    {
+      'id': 'kabir',
+      'name': 'Kabir',
+      'gender': 'male',
+      'descKey': 'voice_deep_grounding'
+    },
+    {
+      'id': 'anand',
+      'name': 'Anand',
+      'gender': 'male',
+      'descKey': 'voice_warm_supportive'
+    },
+    {
+      'id': 'rohan',
+      'name': 'Rohan',
+      'gender': 'male',
+      'descKey': 'voice_friendly_steady'
+    },
+    {
+      'id': 'dev',
+      'name': 'Dev',
+      'gender': 'male',
+      'descKey': 'voice_gentle_composed'
+    },
+    {
+      'id': 'rahul',
+      'name': 'Rahul',
+      'gender': 'male',
+      'descKey': 'voice_warm_natural'
+    },
   ];
 
   @override
@@ -1253,9 +1332,12 @@ class _VoiceSelectionSheetState extends State<_VoiceSelectionSheet> {
         ? const Color(0xFF0F1F1C).withOpacity(0.97)
         : Colors.white.withOpacity(0.97);
     final textColor = isDark ? Colors.white : AppColors.textPrimary;
-    final subTextColor = isDark ? Colors.white.withOpacity(0.45) : AppColors.textSecondary;
-    final borderColor = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08);
-    final handleColor = isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.15);
+    final subTextColor =
+        isDark ? Colors.white.withOpacity(0.45) : AppColors.textSecondary;
+    final borderColor =
+        isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08);
+    final handleColor =
+        isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.15);
 
     return Container(
       margin: const EdgeInsets.only(top: 60),
@@ -1303,24 +1385,24 @@ class _VoiceSelectionSheetState extends State<_VoiceSelectionSheet> {
               padding: EdgeInsets.only(
                   bottom: MediaQuery.of(context).padding.bottom + 16),
               children: _voices.map((v) {
-            final id = v['id'] as String;
-            final isSelected = id == currentSpeaker;
-            final isLoading = _loadingSpeaker == id;
-            return _VoiceTile(
-              name: v['name'] as String,
-              desc: appStr(lang, v['descKey'] as String),
-              gender: v['gender'] as String,
-              isSelected: isSelected,
-              isLoading: isLoading,
-              isDark: isDark,
-              onPreview: () => _previewVoice(id),
-              onSelect: () {
-                widget.parentRef
-                    .read(buddyNotifierProvider.notifier)
-                    .setSpeaker(id);
-              },
-            );
-          }).toList(),
+                final id = v['id'] as String;
+                final isSelected = id == currentSpeaker;
+                final isLoading = _loadingSpeaker == id;
+                return _VoiceTile(
+                  name: v['name'] as String,
+                  desc: appStr(lang, v['descKey'] as String),
+                  gender: v['gender'] as String,
+                  isSelected: isSelected,
+                  isLoading: isLoading,
+                  isDark: isDark,
+                  onPreview: () => _previewVoice(id),
+                  onSelect: () {
+                    widget.parentRef
+                        .read(buddyNotifierProvider.notifier)
+                        .setSpeaker(id);
+                  },
+                );
+              }).toList(),
             ),
           ),
         ],
@@ -1353,7 +1435,8 @@ class _VoiceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textColor = isDark ? Colors.white : AppColors.textPrimary;
-    final subTextColor = isDark ? Colors.white.withOpacity(0.45) : AppColors.textSecondary;
+    final subTextColor =
+        isDark ? Colors.white.withOpacity(0.45) : AppColors.textSecondary;
     return GestureDetector(
       onTap: onSelect,
       child: Container(
@@ -1401,9 +1484,7 @@ class _VoiceTile extends StatelessWidget {
                           fontSize: 14,
                           fontWeight: FontWeight.w600)),
                   Text(desc,
-                      style: TextStyle(
-                          color: subTextColor,
-                          fontSize: 12)),
+                      style: TextStyle(color: subTextColor, fontSize: 12)),
                 ],
               ),
             ),
@@ -1414,7 +1495,8 @@ class _VoiceTile extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
+                  color:
+                      (isDark ? Colors.white : Colors.black).withOpacity(0.08),
                   shape: BoxShape.circle,
                 ),
                 child: isLoading

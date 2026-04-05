@@ -33,5 +33,6 @@ final profileProvider = FutureProvider<Map<String, dynamic>>((ref) async {
 /// All screens should watch this instead of reading profileProvider directly.
 final preferredLanguageProvider = Provider<String>((ref) {
   final profileAsync = ref.watch(profileProvider);
-  return profileAsync.valueOrNull?['preferred_language'] as String? ?? 'English';
+  return profileAsync.valueOrNull?['preferred_language'] as String? ??
+      'English';
 });

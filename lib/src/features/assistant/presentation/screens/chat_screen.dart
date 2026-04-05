@@ -129,7 +129,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final messagesAsync =
         ref.watch(chatNotifierProvider(widget.conversationId));
     final profileAsync = ref.watch(profileProvider);
-    final lang = profileAsync.valueOrNull?['preferred_language'] as String? ?? 'English';
+    final lang =
+        profileAsync.valueOrNull?['preferred_language'] as String? ?? 'English';
     return Scaffold(
       appBar: AppBar(
         title: Text(appStr(lang, 'assistant_title')),
@@ -238,8 +239,7 @@ class _MessageBubble extends StatelessWidget {
               top: 6,
               bottom: hasSources ? 2 : 6,
             ),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: isUser
                   ? AppColors.primary
@@ -321,11 +321,10 @@ class _SourcesButton extends StatelessWidget {
                       children: [
                         Text(
                           '${e.key + 1}.',
-                          style:
-                              Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.primary,
-                                  ),
+                          style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -361,8 +360,7 @@ class _SourcesButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.menu_book_rounded,
-                size: 12,
-                color: AppColors.primary.withValues(alpha: 0.8)),
+                size: 12, color: AppColors.primary.withValues(alpha: 0.8)),
             const SizedBox(width: 4),
             Text(
               'Sources',
@@ -483,7 +481,8 @@ class _InputBarState extends State<_InputBar> {
                     color: _listening ? AppColors.error : AppColors.primary,
                   ),
                   onPressed: _speechAvailable ? _toggleListening : null,
-                  tooltip: appStr(widget.lang, _listening ? 'tap_interrupt' : 'start_conversation'),
+                  tooltip: appStr(widget.lang,
+                      _listening ? 'tap_interrupt' : 'start_conversation'),
                 ),
               ),
             ),
@@ -558,4 +557,3 @@ class _InputBarState extends State<_InputBar> {
     );
   }
 }
-

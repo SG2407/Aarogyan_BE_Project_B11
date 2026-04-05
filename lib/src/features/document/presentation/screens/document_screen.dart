@@ -230,10 +230,11 @@ class _UploadPrompt extends StatelessWidget {
             if (!loading)
               Text(
                 'Camera · PDF · JPG · PNG  (max 1.5 MB)',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5)),
               ),
           ],
         ),
@@ -249,7 +250,8 @@ class _ResultView extends StatelessWidget {
   final DocumentResult result;
   final VoidCallback onScanAnother;
 
-  const _ResultView({required this.lang, required this.result, required this.onScanAnother});
+  const _ResultView(
+      {required this.lang, required this.result, required this.onScanAnother});
 
   @override
   Widget build(BuildContext context) {
@@ -271,8 +273,7 @@ class _ResultView extends StatelessWidget {
               ),
             ),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
@@ -374,7 +375,10 @@ class _ResultView extends StatelessWidget {
               Text(
                 'Reflects how clearly the document text was extracted by OCR.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.5),
                     ),
               ),
             ],
