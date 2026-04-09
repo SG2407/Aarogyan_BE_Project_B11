@@ -400,11 +400,8 @@ class _ConversationSessionsSectionState
       final d = _filterDay!;
       data = data.where((s) {
         try {
-          final dt =
-              DateTime.parse(s['started_at'] as String? ?? '').toLocal();
-          return dt.year == d.year &&
-              dt.month == d.month &&
-              dt.day == d.day;
+          final dt = DateTime.parse(s['started_at'] as String? ?? '').toLocal();
+          return dt.year == d.year && dt.month == d.month && dt.day == d.day;
         } catch (_) {
           return false;
         }
@@ -414,8 +411,7 @@ class _ConversationSessionsSectionState
     if (_filterRange != null) {
       data = data.where((s) {
         try {
-          final dt =
-              DateTime.parse(s['started_at'] as String? ?? '').toLocal();
+          final dt = DateTime.parse(s['started_at'] as String? ?? '').toLocal();
           final day = DateTime(dt.year, dt.month, dt.day);
           return !day.isBefore(_filterRange!.start) &&
               !day.isAfter(_filterRange!.end);
@@ -476,8 +472,8 @@ class _ConversationSessionsSectionState
               GestureDetector(
                 onTap: _openFilter,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -500,8 +496,8 @@ class _ConversationSessionsSectionState
             else
               GestureDetector(
                 onTap: _openFilter,
-                child: Icon(Icons.filter_list_rounded,
-                    color: AppColors.primary),
+                child:
+                    Icon(Icons.filter_list_rounded, color: AppColors.primary),
               ),
           ],
         ),
@@ -537,8 +533,7 @@ class _ConversationSessionsSectionState
               onPressed: () => setState(() => _showAll = true),
               icon: const Icon(Icons.expand_more_rounded, size: 18),
               label: Text('View $remaining more'),
-              style:
-                  TextButton.styleFrom(foregroundColor: AppColors.primary),
+              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
             ),
           ),
         ],
@@ -750,7 +745,9 @@ class _MoodTrendSectionState extends State<_MoodTrendSection> {
       final d = _filterDay!;
       final key =
           '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-      return widget.dataPoints.where((p) => (p['date'] as String?) == key).toList();
+      return widget.dataPoints
+          .where((p) => (p['date'] as String?) == key)
+          .toList();
     }
     if (_filterRange != null) {
       return widget.dataPoints.where((p) {
@@ -899,9 +896,7 @@ class _MoodTrendChartPage extends StatelessWidget {
           ),
           rangeAnnotations: RangeAnnotations(horizontalRangeAnnotations: [
             HorizontalRangeAnnotation(
-                y1: 0,
-                y2: 4,
-                color: AppColors.error.withValues(alpha: 0.05)),
+                y1: 0, y2: 4, color: AppColors.error.withValues(alpha: 0.05)),
             HorizontalRangeAnnotation(
                 y1: 4,
                 y2: 7,
@@ -1331,8 +1326,8 @@ class _SessionActivitySectionState extends State<_SessionActivitySection> {
               GestureDetector(
                 onTap: _openFilter,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -1447,10 +1442,8 @@ class _SessionActivityChartPage extends StatelessWidget {
           backDrawRodData: BackgroundBarChartRodData(
             show: true,
             toY: 10,
-            color: Theme.of(context)
-                .colorScheme
-                .onSurface
-                .withValues(alpha: 0.05),
+            color:
+                Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
           ),
         ),
       ]);
