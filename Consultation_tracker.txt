@@ -1,4 +1,4 @@
-You are building a feature called **Consultation Tracker PDF Export** for a health application named Aarogyaan.
+You are enhancing a feature called export pdf within the Consultation tracker for a health application named Aarogyaan.
 
 The goal is to create a system where users can store consultations with multiple sessions, attach documents, and export a clean, doctor-friendly PDF that includes all relevant information and summaries.
 

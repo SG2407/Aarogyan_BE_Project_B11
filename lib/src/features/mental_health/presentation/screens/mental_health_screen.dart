@@ -29,7 +29,6 @@ class MentalHealthScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dashboardAsync = ref.watch(mentalHealthDashboardProvider);
-    final filter = ref.watch(dashboardFilterProvider);
     final lang = ref.watch(preferredLanguageProvider);
 
     return Scaffold(
@@ -47,7 +46,7 @@ class MentalHealthScreen extends ConsumerWidget {
         error: (e, _) => _ErrorState(
             lang: lang,
             onRetry: () => ref.invalidate(mentalHealthDashboardProvider)),
-        data: (data) => _Dashboard(data: data, filter: filter, lang: lang),
+        data: (data) => _Dashboard(data: data, lang: lang),
       ),
     );
   }
@@ -56,10 +55,8 @@ class MentalHealthScreen extends ConsumerWidget {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 class _Dashboard extends ConsumerWidget {
   final Map<String, dynamic> data;
-  final int filter;
   final String lang;
-  const _Dashboard(
-      {required this.data, required this.filter, required this.lang});
+  const _Dashboard({required this.data, required this.lang});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -69,7 +66,6 @@ class _Dashboard extends ConsumerWidget {
     final heatmap = (data['heatmap'] as List?) ?? [];
     final emotionDist = (data['emotion_distribution'] as Map?) ?? {};
     final latestSession = data['latest_session'] as Map?;
-    final dominantEmotion = (data['dominant_emotion'] as String?) ?? 'neutral';
     final convSessions = (data['conversation_sessions'] as List?) ?? [];
 
     debugPrint(
@@ -78,10 +74,6 @@ class _Dashboard extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       children: [
-        // ── Time filter chips ──────────────────────────────────────────────
-        _TimeFilterChips(selected: filter),
-        const SizedBox(height: 20),
-
         // ── Hero: Latest Emotion Card (#9) ─────────────────────────────────
         if (latestSession != null) ...[
           _LatestEmotionCard(session: latestSession, lang: lang),
@@ -109,21 +101,13 @@ class _Dashboard extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-
-        // ── Dominant emotion card ──────────────────────────────────────────
-        if (total > 0) ...[
-          _DominantEmotionCard(emotion: dominantEmotion),
-          const SizedBox(height: 24),
-        ],
+        const SizedBox(height: 24),
 
         if (total == 0) ...[
           _EmptyState(lang: lang),
         ] else ...[
           // ── Mood Trend Line (#1) ─────────────────────────────────────────
-          _SectionTitle(appStr(lang, 'mood_trend')),
-          const SizedBox(height: 12),
-          _MoodTrendChart(dataPoints: daily),
+          _MoodTrendSection(dataPoints: daily),
           const SizedBox(height: 24),
 
           // ── Emotion Donut (#2) ────────────────────────────────────────
@@ -133,12 +117,8 @@ class _Dashboard extends ConsumerWidget {
           const SizedBox(height: 24),
 
           // ── Conversation Sessions ────────────────────────────────────────
-          if (convSessions.isNotEmpty) ...[
-            _SectionTitle('Conversation Sessions'),
-            const SizedBox(height: 12),
-            _ConversationSessionsList(sessions: convSessions),
-            const SizedBox(height: 24),
-          ],
+          _ConversationSessionsSection(sessions: convSessions),
+          const SizedBox(height: 24),
 
           // ── Heatmap Calendar (#4) ────────────────────────────────────────
           _SectionTitle(appStr(lang, 'mood_calendar')),
@@ -147,9 +127,7 @@ class _Dashboard extends ConsumerWidget {
           const SizedBox(height: 24),
 
           // ── Session Activity Bar (#7) ──────────────────────────────────
-          _SectionTitle(appStr(lang, 'session_activity')),
-          const SizedBox(height: 12),
-          _SessionActivityChart(dataPoints: daily),
+          _SessionActivitySection(dataPoints: daily),
           const SizedBox(height: 24),
 
           // ── Mood legend ──────────────────────────────────────────────────
@@ -187,46 +165,6 @@ class _Dashboard extends ConsumerWidget {
     if (score >= 7) return const Color(0xFF4CAF50);
     if (score >= 4) return const Color(0xFFFFC107);
     return AppColors.error;
-  }
-}
-
-// ─── Time Filter Chips ────────────────────────────────────────────────────────
-class _TimeFilterChips extends ConsumerWidget {
-  final int selected;
-  const _TimeFilterChips({required this.selected});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    const options = [
-      (label: '7 Days', days: 7),
-      (label: '30 Days', days: 30),
-      (label: '90 Days', days: 90),
-      (label: 'All Time', days: 0),
-    ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: options.map((o) {
-          final active = selected == o.days;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(o.label),
-              selected: active,
-              onSelected: (_) {
-                ref.read(dashboardFilterProvider.notifier).state = o.days;
-                ref.invalidate(mentalHealthDashboardProvider);
-              },
-              selectedColor: AppColors.primary,
-              labelStyle: TextStyle(
-                color: active ? Colors.white : null,
-                fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
   }
 }
 
@@ -333,68 +271,354 @@ class _LatestEmotionCard extends StatelessWidget {
   }
 }
 
-// ─── Dominant Emotion Card ────────────────────────────────────────────────────
-class _DominantEmotionCard extends StatelessWidget {
-  final String emotion;
-  const _DominantEmotionCard({required this.emotion});
+// ─── Filter helpers ──────────────────────────────────────────────────────────
+class _FilterResult {
+  final DateTime? day;
+  final DateTimeRange? range;
+  final bool clear;
+  final bool showAll;
+  const _FilterResult(
+      {this.day, this.range, this.clear = false, this.showAll = false});
+}
+
+/// Generic date-range / specific-day filter bottom sheet.
+class _FilterBottomSheet extends StatelessWidget {
+  final DateTime? filterDay;
+  final DateTimeRange? filterRange;
+  const _FilterBottomSheet({this.filterDay, this.filterRange});
 
   @override
   Widget build(BuildContext context) {
-    final meta = _emotions[emotion] ?? _emotions['neutral']!;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: meta.color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: meta.color.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Text(meta.emoji, style: const TextStyle(fontSize: 28)),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Dominant Mood',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.55))),
-              Text(meta.label,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: meta.color, fontWeight: FontWeight.w700)),
-            ],
-          ),
-        ],
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('Filter', style: Theme.of(context).textTheme.titleLarge),
+                const Spacer(),
+                if (filterDay != null || filterRange != null)
+                  TextButton(
+                    onPressed: () => Navigator.pop(
+                        context, const _FilterResult(clear: true)),
+                    child: const Text('Clear'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.calendar_today_rounded),
+              title: const Text('Specific Day'),
+              contentPadding: EdgeInsets.zero,
+              onTap: () async {
+                final d = await showDatePicker(
+                  context: context,
+                  initialDate: filterDay ?? DateTime.now(),
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
+                );
+                if (d != null && context.mounted) {
+                  Navigator.pop(context, _FilterResult(day: d));
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.date_range_rounded),
+              title: const Text('Range of Days'),
+              contentPadding: EdgeInsets.zero,
+              onTap: () async {
+                final r = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
+                  initialDateRange: filterRange,
+                );
+                if (r != null && context.mounted) {
+                  Navigator.pop(context, _FilterResult(range: r));
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ─── Conversation Sessions List ───────────────────────────────────────────────
-class _ConversationSessionsList extends StatelessWidget {
-  final List sessions;
-  const _ConversationSessionsList({required this.sessions});
+class _PageDots extends StatelessWidget {
+  final int current;
+  final int total;
+  const _PageDots({required this.current, required this.total});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: _cardDecor(context),
-      child: Column(
-        children: [
-          for (int i = 0; i < sessions.length; i++) ...[
-            _ConversationSessionTile(
-                session: sessions[i] as Map<String, dynamic>),
-            if (i < sessions.length - 1)
-              Divider(
-                  height: 1,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.06)),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(
+        math.min(total, 12),
+        (i) => Container(
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          width: i == current ? 16 : 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: i == current
+                ? AppColors.primary
+                : AppColors.primary.withValues(alpha: 0.25),
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Conversation Sessions Section ───────────────────────────────────────────
+class _ConversationSessionsSection extends StatefulWidget {
+  final List sessions;
+  const _ConversationSessionsSection({required this.sessions});
+
+  @override
+  State<_ConversationSessionsSection> createState() =>
+      _ConversationSessionsSectionState();
+}
+
+class _ConversationSessionsSectionState
+    extends State<_ConversationSessionsSection> {
+  bool _showAll = false;
+  DateTime? _filterDay;
+  DateTimeRange? _filterRange;
+
+  bool get _hasActiveFilter =>
+      _filterDay != null || _filterRange != null || _showAll;
+
+  List _displayed() {
+    List data = widget.sessions;
+    if (_filterDay != null) {
+      final d = _filterDay!;
+      data = data.where((s) {
+        try {
+          final dt =
+              DateTime.parse(s['started_at'] as String? ?? '').toLocal();
+          return dt.year == d.year &&
+              dt.month == d.month &&
+              dt.day == d.day;
+        } catch (_) {
+          return false;
+        }
+      }).toList();
+      return data;
+    }
+    if (_filterRange != null) {
+      data = data.where((s) {
+        try {
+          final dt =
+              DateTime.parse(s['started_at'] as String? ?? '').toLocal();
+          final day = DateTime(dt.year, dt.month, dt.day);
+          return !day.isBefore(_filterRange!.start) &&
+              !day.isAfter(_filterRange!.end);
+        } catch (_) {
+          return false;
+        }
+      }).toList();
+      return data;
+    }
+    if (_showAll) return data;
+    return data.take(5).toList();
+  }
+
+  Future<void> _openFilter() async {
+    final result = await showModalBottomSheet<_FilterResult>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => _ConvFilterSheet(
+        filterDay: _filterDay,
+        filterRange: _filterRange,
+        showAll: _showAll,
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      if (result.clear) {
+        _showAll = false;
+        _filterDay = null;
+        _filterRange = null;
+      } else if (result.showAll) {
+        _showAll = true;
+        _filterDay = null;
+        _filterRange = null;
+      } else {
+        _showAll = false;
+        _filterDay = result.day;
+        _filterRange = result.range;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _displayed();
+    final remaining = widget.sessions.length - 5;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text('Conversation Sessions',
+                style: Theme.of(context).textTheme.titleLarge),
+            const Spacer(),
+            if (_hasActiveFilter)
+              GestureDetector(
+                onTap: _openFilter,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.filter_list_rounded,
+                          size: 15, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text(_showAll ? 'All' : 'Filtered',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: _openFilter,
+                child: Icon(Icons.filter_list_rounded,
+                    color: AppColors.primary),
+              ),
           ],
+        ),
+        const SizedBox(height: 12),
+        if (items.isEmpty)
+          const _NoDataPlaceholder()
+        else
+          Container(
+            decoration: _cardDecor(context),
+            child: Column(
+              children: [
+                for (int i = 0; i < items.length; i++) ...[
+                  _ConversationSessionTile(
+                      session: items[i] as Map<String, dynamic>),
+                  if (i < items.length - 1)
+                    Divider(
+                        height: 1,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.06)),
+                ],
+              ],
+            ),
+          ),
+        if (!_showAll &&
+            _filterDay == null &&
+            _filterRange == null &&
+            remaining > 0) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton.icon(
+              onPressed: () => setState(() => _showAll = true),
+              icon: const Icon(Icons.expand_more_rounded, size: 18),
+              label: Text('View $remaining more'),
+              style:
+                  TextButton.styleFrom(foregroundColor: AppColors.primary),
+            ),
+          ),
         ],
+      ],
+    );
+  }
+}
+
+/// Conversation-specific filter sheet (adds 'View All' option).
+class _ConvFilterSheet extends StatelessWidget {
+  final DateTime? filterDay;
+  final DateTimeRange? filterRange;
+  final bool showAll;
+  const _ConvFilterSheet(
+      {this.filterDay, this.filterRange, this.showAll = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('Filter Sessions',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const Spacer(),
+                if (filterDay != null || filterRange != null || showAll)
+                  TextButton(
+                    onPressed: () => Navigator.pop(
+                        context, const _FilterResult(clear: true)),
+                    child: const Text('Reset'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.list_rounded),
+              title: const Text('View All'),
+              contentPadding: EdgeInsets.zero,
+              onTap: () =>
+                  Navigator.pop(context, const _FilterResult(showAll: true)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.calendar_today_rounded),
+              title: const Text('Specific Date'),
+              contentPadding: EdgeInsets.zero,
+              onTap: () async {
+                final d = await showDatePicker(
+                  context: context,
+                  initialDate: filterDay ?? DateTime.now(),
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
+                );
+                if (d != null && context.mounted) {
+                  Navigator.pop(context, _FilterResult(day: d));
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.date_range_rounded),
+              title: const Text('Range of Days'),
+              contentPadding: EdgeInsets.zero,
+              onTap: () async {
+                final r = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
+                  initialDateRange: filterRange,
+                );
+                if (r != null && context.mounted) {
+                  Navigator.pop(context, _FilterResult(range: r));
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -497,10 +721,154 @@ class _ConversationSessionTile extends StatelessWidget {
   }
 }
 
-// ─── Mood Trend Line Chart (#1) ───────────────────────────────────────────────
-class _MoodTrendChart extends StatelessWidget {
+// ─── Mood Trend Section (#1) ──────────────────────────────────────────────────
+class _MoodTrendSection extends StatefulWidget {
   final List dataPoints;
-  const _MoodTrendChart({required this.dataPoints});
+  const _MoodTrendSection({required this.dataPoints});
+
+  @override
+  State<_MoodTrendSection> createState() => _MoodTrendSectionState();
+}
+
+class _MoodTrendSectionState extends State<_MoodTrendSection> {
+  DateTime? _filterDay;
+  DateTimeRange? _filterRange;
+  final _pageCtrl = PageController();
+  int _currentPage = 0;
+  static const int _pageSize = 7;
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _hasFilter => _filterDay != null || _filterRange != null;
+
+  List _filtered() {
+    if (_filterDay != null) {
+      final d = _filterDay!;
+      final key =
+          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      return widget.dataPoints.where((p) => (p['date'] as String?) == key).toList();
+    }
+    if (_filterRange != null) {
+      return widget.dataPoints.where((p) {
+        try {
+          final dt = DateTime.parse(p['date'] as String? ?? '');
+          return !dt.isBefore(_filterRange!.start) &&
+              !dt.isAfter(_filterRange!.end);
+        } catch (_) {
+          return false;
+        }
+      }).toList();
+    }
+    return widget.dataPoints;
+  }
+
+  List<List> _pages(List data) {
+    final pages = <List>[];
+    for (int i = 0; i < data.length; i += _pageSize) {
+      pages.add(data.sublist(i, math.min(i + _pageSize, data.length)));
+    }
+    if (pages.isEmpty) pages.add([]);
+    return pages;
+  }
+
+  Future<void> _openFilter() async {
+    final result = await showModalBottomSheet<_FilterResult>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) =>
+          _FilterBottomSheet(filterDay: _filterDay, filterRange: _filterRange),
+    );
+    if (result == null) return;
+    setState(() {
+      if (result.clear) {
+        _filterDay = null;
+        _filterRange = null;
+      } else {
+        _filterDay = result.day;
+        _filterRange = result.range;
+      }
+      _currentPage = 0;
+    });
+    _pageCtrl.jumpToPage(0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filtered();
+    final pages = _pages(filtered);
+    final totalPages = pages.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text('Mood Trend', style: Theme.of(context).textTheme.titleLarge),
+            const Spacer(),
+            if (_hasFilter)
+              GestureDetector(
+                onTap: _openFilter,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.filter_list_rounded,
+                          size: 15, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text('Filtered',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: _openFilter,
+                child:
+                    Icon(Icons.filter_list_rounded, color: AppColors.primary),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 200,
+          child: pages[0].isEmpty
+              ? const _NoDataPlaceholder()
+              : PageView.builder(
+                  controller: _pageCtrl,
+                  onPageChanged: (p) => setState(() => _currentPage = p),
+                  itemCount: totalPages,
+                  itemBuilder: (_, i) =>
+                      _MoodTrendChartPage(dataPoints: pages[i]),
+                ),
+        ),
+        if (totalPages > 1) ...[
+          const SizedBox(height: 8),
+          _PageDots(current: _currentPage, total: totalPages),
+        ],
+      ],
+    );
+  }
+}
+
+class _MoodTrendChartPage extends StatelessWidget {
+  final List dataPoints;
+  const _MoodTrendChartPage({required this.dataPoints});
 
   @override
   Widget build(BuildContext context) {
@@ -511,12 +879,12 @@ class _MoodTrendChart extends StatelessWidget {
     }).toList();
 
     return Container(
-      height: 180,
       padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
       decoration: _cardDecor(context),
       child: LineChart(
         LineChartData(
-          minY: 0, maxY: 10,
+          minY: 0,
+          maxY: 10,
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
@@ -529,10 +897,11 @@ class _MoodTrendChart extends StatelessWidget {
               strokeWidth: 1,
             ),
           ),
-          // Shaded zones: red 0–4, yellow 4–7, green 7–10
           rangeAnnotations: RangeAnnotations(horizontalRangeAnnotations: [
             HorizontalRangeAnnotation(
-                y1: 0, y2: 4, color: AppColors.error.withValues(alpha: 0.05)),
+                y1: 0,
+                y2: 4,
+                color: AppColors.error.withValues(alpha: 0.05)),
             HorizontalRangeAnnotation(
                 y1: 4,
                 y2: 7,
@@ -544,37 +913,41 @@ class _MoodTrendChart extends StatelessWidget {
           ]),
           titlesData: FlTitlesData(
             leftTitles: AxisTitles(
-                sideTitles: SideTitles(
-              showTitles: true,
-              interval: 2,
-              reservedSize: 28,
-              getTitlesWidget: (v, _) => Text(v.toInt().toString(),
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: 2,
+                reservedSize: 28,
+                getTitlesWidget: (v, _) => Text(
+                  v.toInt().toString(),
                   style: TextStyle(
                       fontSize: 10,
                       color: Theme.of(context)
                           .colorScheme
                           .onSurface
-                          .withValues(alpha: 0.45))),
-            )),
+                          .withValues(alpha: 0.45)),
+                ),
+              ),
+            ),
             bottomTitles: AxisTitles(
-                sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 20,
-              interval: math.max(1, (dataPoints.length / 5).ceil()).toDouble(),
-              getTitlesWidget: (v, _) {
-                final i = v.toInt();
-                if (i < 0 || i >= dataPoints.length) return const SizedBox();
-                final raw = (dataPoints[i]['date'] ?? '').toString();
-                final short = raw.length >= 5 ? raw.substring(5) : raw;
-                return Text(short,
-                    style: TextStyle(
-                        fontSize: 9,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.45)));
-              },
-            )),
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 20,
+                interval: 1,
+                getTitlesWidget: (v, _) {
+                  final i = v.toInt();
+                  if (i < 0 || i >= dataPoints.length) return const SizedBox();
+                  final raw = (dataPoints[i]['date'] ?? '').toString();
+                  final short = raw.length >= 5 ? raw.substring(5) : raw;
+                  return Text(short,
+                      style: TextStyle(
+                          fontSize: 9,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.45)));
+                },
+              ),
+            ),
             rightTitles:
                 const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             topTitles:
@@ -596,7 +969,7 @@ class _MoodTrendChart extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   colors: [
                     AppColors.primary.withValues(alpha: 0.18),
-                    AppColors.primary.withValues(alpha: 0.0)
+                    AppColors.primary.withValues(alpha: 0.0),
                   ],
                 ),
               ),
@@ -860,49 +1233,240 @@ class _HeatLegendDot extends StatelessWidget {
   }
 }
 
-// ─── Session Activity Bar (#7) ────────────────────────────────────────────────
-class _SessionActivityChart extends StatelessWidget {
+// ─── Session Activity Section (#7) ───────────────────────────────────────────
+class _SessionActivitySection extends StatefulWidget {
   final List dataPoints;
-  const _SessionActivityChart({required this.dataPoints});
+  const _SessionActivitySection({required this.dataPoints});
+
+  @override
+  State<_SessionActivitySection> createState() =>
+      _SessionActivitySectionState();
+}
+
+class _SessionActivitySectionState extends State<_SessionActivitySection> {
+  DateTime? _filterDay;
+  DateTimeRange? _filterRange;
+  final _pageCtrl = PageController();
+  int _currentPage = 0;
+  static const int _pageSize = 7;
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _hasFilter => _filterDay != null || _filterRange != null;
+
+  List _filtered() {
+    if (_filterDay != null) {
+      final d = _filterDay!;
+      final key =
+          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      return widget.dataPoints
+          .where((p) => (p['date'] as String?) == key)
+          .toList();
+    }
+    if (_filterRange != null) {
+      return widget.dataPoints.where((p) {
+        try {
+          final dt = DateTime.parse(p['date'] as String? ?? '');
+          return !dt.isBefore(_filterRange!.start) &&
+              !dt.isAfter(_filterRange!.end);
+        } catch (_) {
+          return false;
+        }
+      }).toList();
+    }
+    return widget.dataPoints;
+  }
+
+  List<List> _pages(List data) {
+    final pages = <List>[];
+    for (int i = 0; i < data.length; i += _pageSize) {
+      pages.add(data.sublist(i, math.min(i + _pageSize, data.length)));
+    }
+    if (pages.isEmpty) pages.add([]);
+    return pages;
+  }
+
+  Future<void> _openFilter() async {
+    final result = await showModalBottomSheet<_FilterResult>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) =>
+          _FilterBottomSheet(filterDay: _filterDay, filterRange: _filterRange),
+    );
+    if (result == null) return;
+    setState(() {
+      if (result.clear) {
+        _filterDay = null;
+        _filterRange = null;
+      } else {
+        _filterDay = result.day;
+        _filterRange = result.range;
+      }
+      _currentPage = 0;
+    });
+    _pageCtrl.jumpToPage(0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filtered();
+    final pages = _pages(filtered);
+    final totalPages = pages.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text('Session Activity',
+                style: Theme.of(context).textTheme.titleLarge),
+            const Spacer(),
+            if (_hasFilter)
+              GestureDetector(
+                onTap: _openFilter,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.filter_list_rounded,
+                          size: 15, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text('Filtered',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: _openFilter,
+                child:
+                    Icon(Icons.filter_list_rounded, color: AppColors.primary),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 160,
+          child: pages[0].isEmpty
+              ? const _NoDataPlaceholder()
+              : PageView.builder(
+                  controller: _pageCtrl,
+                  onPageChanged: (p) => setState(() => _currentPage = p),
+                  itemCount: totalPages,
+                  itemBuilder: (_, i) =>
+                      _SessionActivityChartPage(dataPoints: pages[i]),
+                ),
+        ),
+        if (totalPages > 1) ...[
+          const SizedBox(height: 8),
+          _PageDots(current: _currentPage, total: totalPages),
+        ],
+        const SizedBox(height: 10),
+        // Color legend
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: _cardDecor(context),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: const [
+              _ActivityLegendItem(color: Color(0xFF80CBC4), label: '1–3'),
+              _ActivityLegendItem(color: Color(0xFF26A69A), label: '4–6'),
+              _ActivityLegendItem(color: Color(0xFF1A6B5A), label: '7–10'),
+              _ActivityLegendItem(color: Color(0xFFD94F4F), label: '>10'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActivityLegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _ActivityLegendItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+              color: color, borderRadius: BorderRadius.circular(2)),
+        ),
+        const SizedBox(width: 5),
+        Text(label, style: const TextStyle(fontSize: 11)),
+      ],
+    );
+  }
+}
+
+class _SessionActivityChartPage extends StatelessWidget {
+  final List dataPoints;
+  const _SessionActivityChartPage({required this.dataPoints});
+
+  static Color _barColor(int count) {
+    if (count > 10) return const Color(0xFFD94F4F); // red – exceeded
+    if (count >= 7) return const Color(0xFF1A6B5A); // dark green – high
+    if (count >= 4) return const Color(0xFF26A69A); // teal – medium
+    return const Color(0xFF80CBC4); // light teal – low
+  }
 
   @override
   Widget build(BuildContext context) {
     if (dataPoints.isEmpty) return const _NoDataPlaceholder();
 
-    final maxCount = dataPoints.fold<int>(
-        0, (m, p) => math.max(m, (p['session_count'] as num?)?.toInt() ?? 0));
-    if (maxCount == 0) return const _NoDataPlaceholder();
-
     final barGroups = dataPoints.asMap().entries.map((e) {
-      final count = (e.value['session_count'] as num?)?.toDouble() ?? 0;
+      final count = (e.value['session_count'] as num?)?.toInt() ?? 0;
+      final displayY = math.min(count, 10).toDouble();
       return BarChartGroupData(x: e.key, barRods: [
         BarChartRodData(
-          toY: count,
-          color: AppColors.primary,
-          width: dataPoints.length > 20 ? 6 : 14,
+          toY: displayY,
+          color: _barColor(count),
+          width: 18,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
           backDrawRodData: BackgroundBarChartRodData(
             show: true,
-            toY: maxCount.toDouble(),
-            color:
-                Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
+            toY: 10,
+            color: Theme.of(context)
+                .colorScheme
+                .onSurface
+                .withValues(alpha: 0.05),
           ),
         ),
       ]);
     }).toList();
 
     return Container(
-      height: 150,
       padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
       decoration: _cardDecor(context),
       child: BarChart(
         BarChartData(
-          maxY: maxCount.toDouble() + 0.5,
+          maxY: 10,
           barGroups: barGroups,
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
-            horizontalInterval: 1,
+            horizontalInterval: 2,
             getDrawingHorizontalLine: (_) => FlLine(
               color: Theme.of(context)
                   .colorScheme
@@ -913,39 +1477,43 @@ class _SessionActivityChart extends StatelessWidget {
           ),
           titlesData: FlTitlesData(
             leftTitles: AxisTitles(
-                sideTitles: SideTitles(
-              showTitles: true,
-              interval: 1,
-              reservedSize: 24,
-              getTitlesWidget: (v, _) => v == v.floorToDouble()
-                  ? Text(v.toInt().toString(),
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: 2,
+                reservedSize: 24,
+                getTitlesWidget: (v, _) => v == v.floorToDouble()
+                    ? Text(
+                        v.toInt().toString(),
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.45)),
+                      )
+                    : const SizedBox(),
+              ),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 18,
+                interval: 1,
+                getTitlesWidget: (v, _) {
+                  final i = v.toInt();
+                  if (i < 0 || i >= dataPoints.length) return const SizedBox();
+                  final raw = (dataPoints[i]['date'] ?? '').toString();
+                  final short = raw.length >= 5 ? raw.substring(5) : raw;
+                  return Text(short,
                       style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 9,
                           color: Theme.of(context)
                               .colorScheme
                               .onSurface
-                              .withValues(alpha: 0.45)))
-                  : const SizedBox(),
-            )),
-            bottomTitles: AxisTitles(
-                sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 18,
-              interval: math.max(1, (dataPoints.length / 5).ceil()).toDouble(),
-              getTitlesWidget: (v, _) {
-                final i = v.toInt();
-                if (i < 0 || i >= dataPoints.length) return const SizedBox();
-                final raw = (dataPoints[i]['date'] ?? '').toString();
-                final short = raw.length >= 5 ? raw.substring(5) : raw;
-                return Text(short,
-                    style: TextStyle(
-                        fontSize: 9,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.45)));
-              },
-            )),
+                              .withValues(alpha: 0.45)));
+                },
+              ),
+            ),
             rightTitles:
                 const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             topTitles:
