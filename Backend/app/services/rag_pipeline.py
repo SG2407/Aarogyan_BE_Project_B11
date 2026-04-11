@@ -96,7 +96,7 @@ def _retrieve_sync(
     # - SOURCE:  minimum score for the book name to be surfaced to the user.
     #   Only very high-confidence matches (>=0.85) are shown as sources.
     _CONTEXT_THRESHOLD = 0.45
-    _SOURCE_THRESHOLD = 0.85
+    _SOURCE_THRESHOLD = 0.60
 
     context_hits = [h for h in hits if h.score >= _CONTEXT_THRESHOLD]
     logger.info(
