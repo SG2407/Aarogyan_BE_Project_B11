@@ -10,6 +10,7 @@ import '../../../../shared/widgets/app_text_field.dart';
 import '../../../../shared/widgets/section_header.dart';
 import '../../../auth/presentation/auth_notifier.dart';
 import '../../../onboarding/presentation/guided_tour_provider.dart';
+import '../../../onboarding/presentation/guided_tour_dialog.dart';
 import '../../../onboarding/presentation/screen_keys.dart';
 import '../../../onboarding/presentation/tour_trigger.dart';
 
@@ -560,12 +561,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: () {
-              // Delay to avoid modifying provider during widget tree build.
-              Future(() {
+            onPressed: () async {
+              final wantsTour = await showGuidedTourDialog(context, ref);
+              if (wantsTour && mounted) {
                 ref.read(guidedTourProvider.notifier).startTour();
-                if (mounted) context.go('/home');
-              });
+                context.go('/home');
+              }
             },
             icon: const Icon(Icons.tour_rounded),
             label: Text(appStr(lang, 'take_tour')),

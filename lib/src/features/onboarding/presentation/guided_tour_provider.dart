@@ -14,6 +14,52 @@ enum TourPhase {
   completed,
 }
 
+/// Display names for each phase (used in the transition dialog).
+const phaseTitles = {
+  'en': {
+    TourPhase.home: 'Home Dashboard',
+    TourPhase.profile: 'Your Profile',
+    TourPhase.consultations: 'Consultation Tracker',
+    TourPhase.assistant: 'AI Health Assistant',
+    TourPhase.documents: 'Document Scanner',
+    TourPhase.buddy: 'Emotional Buddy (Orbz)',
+    TourPhase.mentalHealth: 'Mental Health Tracker',
+  },
+  'hi': {
+    TourPhase.home: 'होम डैशबोर्ड',
+    TourPhase.profile: 'आपकी प्रोफ़ाइल',
+    TourPhase.consultations: 'परामर्श ट्रैकर',
+    TourPhase.assistant: 'AI स्वास्थ्य सहायक',
+    TourPhase.documents: 'दस्तावेज़ स्कैनर',
+    TourPhase.buddy: 'इमोशनल बडी (ऑर्ब्ज़)',
+    TourPhase.mentalHealth: 'मानसिक स्वास्थ्य ट्रैकर',
+  },
+  'mr': {
+    TourPhase.home: 'होम डॅशबोर्ड',
+    TourPhase.profile: 'तुमचे प्रोफाइल',
+    TourPhase.consultations: 'सल्लामसलत ट्रॅकर',
+    TourPhase.assistant: 'AI आरोग्य सहाय्यक',
+    TourPhase.documents: 'दस्तऐवज स्कॅनर',
+    TourPhase.buddy: 'इमोशनल बडी (ऑर्ब्ज)',
+    TourPhase.mentalHealth: 'मानसिक आरोग्य ट्रॅकर',
+  },
+};
+
+/// Icons for each phase.
+const phaseIcons = {
+  TourPhase.home: Icons.home_rounded,
+  TourPhase.profile: Icons.person_rounded,
+  TourPhase.consultations: Icons.folder_special_rounded,
+  TourPhase.assistant: Icons.chat_bubble_rounded,
+  TourPhase.documents: Icons.document_scanner_rounded,
+  TourPhase.buddy: Icons.favorite_rounded,
+  TourPhase.mentalHealth: Icons.bar_chart_rounded,
+};
+
+/// Selected language for tour voice narration.
+/// Values: 'en', 'hi', 'mr'
+final tourLanguageProvider = StateProvider<String>((ref) => 'en');
+
 class GuidedTourState {
   final bool isActive;
   final TourPhase currentPhase;

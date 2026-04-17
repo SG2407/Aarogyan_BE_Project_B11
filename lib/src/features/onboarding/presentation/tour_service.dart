@@ -30,15 +30,27 @@ class TourService {
   TourService._();
 
   static final FlutterTts _tts = FlutterTts();
-  static bool _ttsInitialized = false;
+  static String _currentTtsLang = '';
 
-  static Future<void> _initTts() async {
-    if (_ttsInitialized) return;
-    await _tts.setLanguage('en-US');
+  static Future<void> _initTts(String langCode) async {
+    final locale = _langToLocale(langCode);
+    if (_currentTtsLang == locale) return;
+    _currentTtsLang = locale;
+    await _tts.setLanguage(locale);
     await _tts.setSpeechRate(0.45);
     await _tts.setVolume(1.0);
     await _tts.setPitch(1.0);
-    _ttsInitialized = true;
+  }
+
+  static String _langToLocale(String code) {
+    switch (code) {
+      case 'hi':
+        return 'hi-IN';
+      case 'mr':
+        return 'mr-IN';
+      default:
+        return 'en-US';
+    }
   }
 
   /// Show the coach mark tour for the given steps.
@@ -49,7 +61,8 @@ class TourService {
     required List<TourStep> steps,
     required TourPhase phase,
   }) async {
-    await _initTts();
+    final langCode = ref.read(tourLanguageProvider);
+    await _initTts(langCode);
 
     // Filter out steps whose keys are not currently in the widget tree
     final validSteps = steps.where((s) => s.key.currentContext != null).toList();
@@ -126,10 +139,251 @@ class TourService {
   }
 
   static void _advancePhase(BuildContext context, WidgetRef ref) {
-    final route = ref.read(guidedTourProvider.notifier).advanceToNextPhase();
-    if (route != null && context.mounted) {
-      context.go(route);
+    final notifier = ref.read(guidedTourProvider.notifier);
+    // Peek at the next phase before advancing
+    final currentPhase = ref.read(guidedTourProvider).currentPhase;
+    final phaseOrder = [
+      TourPhase.home,
+      TourPhase.profile,
+      TourPhase.consultations,
+      TourPhase.assistant,
+      TourPhase.documents,
+      TourPhase.buddy,
+      TourPhase.mentalHealth,
+      TourPhase.completed,
+    ];
+    final idx = phaseOrder.indexOf(currentPhase);
+    final nextPhase =
+        (idx >= 0 && idx < phaseOrder.length - 1) ? phaseOrder[idx + 1] : null;
+
+    if (nextPhase == null || nextPhase == TourPhase.completed) {
+      // Last phase — show completion dialog
+      _showTourCompleteDialog(context, ref).then((_) {
+        final route = notifier.advanceToNextPhase();
+        if (route != null && context.mounted) context.go(route);
+      });
+    } else {
+      // Show "Next up" transition dialog
+      _showTransitionDialog(context, ref, nextPhase).then((_) {
+        final route = notifier.advanceToNextPhase();
+        if (route != null && context.mounted) context.go(route);
+      });
     }
+  }
+
+  /// Transition dialog showing which feature comes next.
+  static Future<void> _showTransitionDialog(
+      BuildContext context, WidgetRef ref, TourPhase nextPhase) {
+    final lang = ref.read(tourLanguageProvider);
+    final titles = phaseTitles[lang] ?? phaseTitles['en']!;
+    final title = titles[nextPhase] ?? nextPhase.name;
+    final icon = phaseIcons[nextPhase] ?? Icons.arrow_forward_rounded;
+
+    final ttsMap = {
+      'en': 'Next up, $title',
+      'hi': 'अगला, $title',
+      'mr': 'पुढील, $title',
+    };
+    _speak(ttsMap[lang] ?? ttsMap['en']!);
+
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      transitionDuration: const Duration(milliseconds: 350),
+      transitionBuilder: (ctx, anim, _, child) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+          child: FadeTransition(opacity: anim, child: child),
+        );
+      },
+      pageBuilder: (ctx, _, __) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 48),
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: Theme.of(ctx).colorScheme.surface,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.25),
+                    blurRadius: 30,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: AppColors.primary, size: 32),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    lang == 'hi'
+                        ? 'अगला'
+                        : lang == 'mr'
+                            ? 'पुढील'
+                            : 'Next Up',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    title,
+                    style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 20),
+                      label: Text(
+                        lang == 'hi'
+                            ? 'आगे बढ़ें'
+                            : lang == 'mr'
+                                ? 'पुढे जा'
+                                : 'Continue',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Tour complete celebration dialog.
+  static Future<void> _showTourCompleteDialog(
+      BuildContext context, WidgetRef ref) {
+    final lang = ref.read(tourLanguageProvider);
+    final ttsMap = {
+      'en':
+          'Congratulations! You have completed the guided tour. Enjoy using Aarogyan!',
+      'hi':
+          'बधाई हो! आपने गाइडेड टूर पूरा कर लिया है। आरोग्यन का आनंद लें!',
+      'mr':
+          'अभिनंदन! तुम्ही मार्गदर्शित टूर पूर्ण केला आहे. आरोग्यनचा आनंद घ्या!',
+    };
+    _speak(ttsMap[lang] ?? ttsMap['en']!);
+
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      transitionDuration: const Duration(milliseconds: 350),
+      transitionBuilder: (ctx, anim, _, child) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+          child: FadeTransition(opacity: anim, child: child),
+        );
+      },
+      pageBuilder: (ctx, _, __) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 48),
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: Theme.of(ctx).colorScheme.surface,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.25),
+                    blurRadius: 30,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🎉', style: TextStyle(fontSize: 48)),
+                  const SizedBox(height: 16),
+                  Text(
+                    lang == 'hi'
+                        ? 'टूर पूरा हुआ!'
+                        : lang == 'mr'
+                            ? 'टूर पूर्ण झाला!'
+                            : 'Tour Complete!',
+                    style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    lang == 'hi'
+                        ? 'आप आरोग्यन की सभी सुविधाओं से परिचित हो गए हैं। अपनी स्वास्थ्य यात्रा का आनंद लें!'
+                        : lang == 'mr'
+                            ? 'तुम्ही आरोग्यनच्या सर्व वैशिष्ट्यांशी परिचित झालात. तुमच्या आरोग्य प्रवासाचा आनंद घ्या!'
+                            : 'You\'re all set! You\'ve explored every feature of Aarogyan. Enjoy your health journey!',
+                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                          height: 1.5,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Text(
+                        lang == 'hi'
+                            ? 'शुरू करें'
+                            : lang == 'mr'
+                                ? 'सुरू करा'
+                                : 'Let\'s Go!',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   static Future<void> _speak(String text) async {

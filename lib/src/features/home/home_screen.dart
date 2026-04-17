@@ -65,7 +65,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final tourCompleted = await repo.isTourCompleted();
     if (justRegistered && !tourCompleted && mounted) {
       await repo.setJustRegistered(false);
-      final wantsTour = await showGuidedTourDialog(context);
+      final wantsTour = await showGuidedTourDialog(context, ref);
       if (wantsTour && mounted) {
         ref.read(guidedTourProvider.notifier).startTour();
       }
