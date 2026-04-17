@@ -15,6 +15,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../../data/buddy_repository.dart';
 import '../../../profile/data/profile_repository.dart';
 import '../widgets/orb_widget.dart';
+import '../../../onboarding/presentation/guided_tour_provider.dart';
+import '../../../onboarding/presentation/screen_keys.dart';
+import '../../../onboarding/presentation/tour_trigger.dart';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 enum BuddyPhase { idle, listening, processing, playing }
@@ -579,6 +582,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     final profileAsync = ref.watch(profileProvider);
     final preferredLang =
         profileAsync.valueOrNull?['preferred_language'] as String? ?? 'English';
+    final buddyKeys = ref.watch(buddyScreenKeysProvider);
 
     final convState = _toConvState(s.phase);
 
@@ -616,7 +620,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
                                       lang: preferredLang,
                                       isDark: isDark),
                                   const SizedBox(height: 20),
-                                  OrbWidget(state: convState, size: 200),
+                                  OrbWidget(key: buddyKeys.orbKey, state: convState, size: 200),
                                 ],
                               ),
                             ),
@@ -636,6 +640,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
                             ),
                           ),
                         _BuddyBottomControls(
+                          key: buddyKeys.startButtonKey,
                           isActive: s.conversationActive,
                           onStart: () => notifier.startConversation(
                               preferredLang: preferredLang),
@@ -647,6 +652,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
                   },
                 ),
               ),
+              const TourTrigger(phase: TourPhase.buddy),
             ],
           ),
         ),
@@ -663,6 +669,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         children: [
           // ── Instruction button (top-left) ──
           _GlassIconButton(
+            key: ref.read(buddyScreenKeysProvider).infoButtonKey,
             icon: Icons.info_outline_rounded,
             onTap: () => _showInstructionsDialog(context, lang, isDark),
             isDark: isDark,
@@ -691,6 +698,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
           const Spacer(),
           // ── Voice selection button (top-right) ──
           _GlassIconButton(
+            key: ref.read(buddyScreenKeysProvider).voiceSelectKey,
             icon: Icons.record_voice_over_rounded,
             onTap: () => _showVoiceSelectionSheet(context, ref, lang, isDark),
             isDark: isDark,
@@ -861,6 +869,7 @@ class _BuddyBottomControls extends StatelessWidget {
   final String lang;
 
   const _BuddyBottomControls({
+    super.key,
     required this.isActive,
     required this.onStart,
     required this.onEnd,
@@ -1013,7 +1022,7 @@ class _GlassIconButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool isDark;
   const _GlassIconButton(
-      {required this.icon, required this.onTap, this.isDark = true});
+      {super.key, required this.icon, required this.onTap, this.isDark = true});
 
   @override
   Widget build(BuildContext context) {

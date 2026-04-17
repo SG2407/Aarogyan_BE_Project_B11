@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../auth_notifier.dart';
 import '../widgets/terms_dialog.dart';
+import '../../../onboarding/data/onboarding_repository.dart';
 
 class SignUpScreen extends ConsumerStatefulWidget {
   const SignUpScreen({super.key});
@@ -52,6 +53,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       );
       return;
     }
+    // Set flag BEFORE signUp — once auth state changes, GoRouter's redirect
+    // will unmount this screen immediately, so code after signUp may never run.
+    await ref.read(onboardingRepositoryProvider).setJustRegistered(true);
+
     await ref.read(authNotifierProvider.notifier).signUp(
           email: _emailCtrl.text.trim(),
           password: _passCtrl.text,
@@ -60,15 +65,16 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
         );
     final state = ref.read(authNotifierProvider).value;
     if (state?.error != null && mounted) {
+      // Signup failed — clear the flag
+      await ref.read(onboardingRepositoryProvider).setJustRegistered(false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(state!.error!),
           backgroundColor: AppColors.error,
         ),
       );
-    } else if (state?.status == AuthStatus.authenticated && mounted) {
-      context.go('/auth/profile-setup');
     }
+    // Navigation is handled by GoRouter redirect (auth → /home)
   }
 
   @override

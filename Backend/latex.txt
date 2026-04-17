@@ -1,0 +1,1376 @@
+\documentclass[a4paper,12pt]{report}
+
+% ── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{longtable}
+\usepackage{titlesec}
+\usepackage{setspace}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{caption}
+
+
+% ── Colours ───────────────────────────────────────────────────────────────────
+\definecolor{aarogyanteal}{HTML}{1A6B5A}
+\definecolor{aarogyanbg}{HTML}{E8F5F0}
+\definecolor{sectioncolor}{HTML}{1A6B5A}
+
+% ── Typography & Spacing ─────────────────────────────────────────────────────
+\setstretch{1.25}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+% ── Section Formatting ───────────────────────────────────────────────────────
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{sectioncolor}}
+  {\chaptertitlename\ \thechapter}{18pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{sectioncolor}}
+  {\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{sectioncolor!80!black}}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{sectioncolor!60!black}}
+  {\thesubsubsection}{1em}{}
+
+% ── Header / Footer ──────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{IndiaAI Fellowship}}
+\fancyhead[R]{\small\textit{Aarogyan Project Report}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% ── Hyperref Setup ───────────────────────────────────────────────────────────
+\hypersetup{
+  pdftitle={Aarogyan -- A Unified AI-Powered Medical Wellness Platform},
+  pdfauthor={Sahil},
+  pdfsubject={IndiaAI Fellowship Project Progress Report},
+  colorlinks=false,
+  bookmarksnumbered=true,
+  bookmarksopen=true,
+}
+
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{document}
+\newgeometry{left=1in,right=1in,top=1in,bottom=1in}
+\section*{}
+\pagenumbering{gobble}
+\begin{center}
+\Huge
+\textbf{
+Aarogyan : A Unified AI-Powered Medical and Wellness Platform
+}
+
+\vspace*{1.5cm}
+
+\large
+\textbf{
+PROJECT PROGRESS REPORT
+}
+
+\vspace*{1.0cm}
+\textbf{
+BACHELOR OF ENGINEERING
+}
+
+\Large
+\textbf{
+Computer Engineering
+}
+
+\vspace*{1cm}
+\large
+\textbf{SUBMITTED BY}
+\linebreak
+Sahil Sunil Gurjar
+\linebreak
+(ID: UG251007002159)
+\linebreak
+
+\textbf{Under the guidance of}
+\linebreak
+Prof. Dr. Ms. D. V. Gore
+\linebreak
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[scale=1.0]{logo.png}
+\end{center}
+\end{figure}
+
+\Large
+\textbf{
+Department of Computer Engineering
+\linebreak
+P. E. S. Modern College of Engineering,
+\linebreak
+Pune.
+\linebreak
+\linebreak
+2025-2026
+}
+\end{center}
+\newpage
+
+% ── Certificate Page ──────────────────────────────────────────────────────────
+\begin{center}
+
+\begin{figure}[h]
+\centering
+\includegraphics[scale=0.8]{logo.png}
+\end{figure}
+
+\vspace{0.3cm}
+
+{\LARGE \textbf{CERTIFICATE}}
+
+\vspace{0.8cm}
+
+\end{center}
+
+\begin{center}
+\setstretch{1.5}
+This is to certify that the project entitled
+
+\vspace{0.3cm}
+
+{\large \textbf{Aarogyan --- A Unified AI Powered Medical Wellness Platform}}
+
+\vspace{0.3cm}
+
+submitted by
+
+\vspace{0.3cm}
+
+\textbf{Sahil Sunil Gurjar}
+
+\vspace{0.3cm}
+
+has been successfully completed under the supervision of \textbf{Prof.\ Dr.\ Ms.\ D.\ V.\ Gore} during the academic year 2025--2026. This certificate is issued to confirm the completion of the project in fulfillment of the requirements of Savitribai Phule Pune University, Pune for the award of the degree of \textbf{Bachelor of Engineering (Computer Engineering)}.
+
+It is further certified that the student has applied for the \textbf{IndiaAI Fellowship}, and the project has \textbf{exceptionally} met the expected standards, objectives, and timeline.
+
+This certificate is issued for submission to the \textbf{IndiaAI Fellowship Programme}.
+
+
+\end{center}
+
+\vspace{1cm}
+
+\noindent
+\textbf{Date:} \rule{4cm}{0.4pt} \hfill \textbf{Place:} Pune
+
+\vspace{1.5cm}
+
+\noindent
+\begin{minipage}[t]{0.45\textwidth}
+\centering
+\rule{5cm}{0.4pt}\\[4pt]
+\textbf{Prof.\ Dr.\ Ms.\ D.\ V.\ Gore}\\
+Project Guide\\
+Department of Computer Engineering
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\textwidth}
+\centering
+\rule{5cm}{0.4pt}\\[4pt]
+\textbf{Prof.\ Dr.\ Mrs.\ S.\ A.\ Itkar}\\
+Head of Department\\
+Department of Computer Engineering
+\end{minipage}
+
+\newpage
+
+% ── Front Matter ──────────────────────────────────────────────────────────────
+\pagenumbering{roman}
+
+\tableofcontents
+\clearpage
+
+\listoftables
+\clearpage
+
+\listoffigures
+\clearpage
+
+% ── Main Matter ───────────────────────────────────────────────────────────────
+\pagenumbering{arabic}
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 1: ABSTRACT
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Abstract}
+
+Aarogyan (Sanskrit for ``health'') is a cross-platform AI-powered medical wellness application designed to address critical gaps in healthcare accessibility, health literacy, and emotional well-being --- particularly in developing economies such as India. The platform integrates five distinct AI-driven modules into a unified mobile experience: a Retrieval-Augmented Generation (RAG) based Medical Assistant for context-aware health guidance, a Document Summarisation engine combining EasyOCR with LLM-based plain-language explanation, a Consultation Tracker enabling longitudinal treatment record management with AI-generated session summaries and exportable PDF reports, an Emotional Buddy (``Orbz'') providing multimodal (text + voice) empathetic support with real-time emotion detection via DistilRoBERTa and Wav2Vec2 models fused through a deterministic conflict-resolution engine, and a Mental Health Tracker offering data-driven mood visualisations derived from emotional sessions. Built with a Flutter/Dart frontend communicating over REST APIs with a Python FastAPI backend, the system leverages Supabase for structured data and file storage, Groq for LLM inference, Qdrant Cloud for vector search, and Sarvam AI for multilingual text-to-speech. The application supports English, Hindi, and Marathi, and is deployed on HuggingFace Spaces with Docker containerisation.
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 2: PROBLEM STATEMENT
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Problem Statement}
+
+Healthcare accessibility and health literacy remain critical challenges in developing economies like India. A large segment of the population --- including elderly individuals, chronic illness patients, and the general public --- faces significant barriers:
+
+\begin{enumerate}[label=(\alph*), leftmargin=2em]
+  \item \textbf{Delayed access to medical professionals}, especially in rural and semi-urban areas, leading to poor precautionary behaviour and avoidable health deterioration.
+
+  \item \textbf{Inability to interpret complex medical documents} --- prescriptions, lab reports, and radiology findings --- written in clinical terminology, resulting in non-compliance and confusion.
+
+  \item \textbf{Absence of structured systems for patients to track their medical consultations over time.} Patients frequently lose prescriptions, forget medication changes, and cannot communicate treatment history clearly across multiple doctor visits --- leading to fragmented continuity of care, repeated tests, and inefficient consultations.
+
+  \item \textbf{Negligible infrastructure for mental and emotional well-being.} Mental health services are inaccessible, stigmatised, or unaffordable for the majority of the population.
+\end{enumerate}
+
+Existing health applications address these problems in isolation, if at all. There is no unified platform that combines AI-driven health guidance, document comprehension, treatment tracking, and emotional support within a single, accessible, multilingual interface.
+
+Aarogyan is designed to bridge this gap as a precautionary and assistive platform --- strictly non-diagnostic and non-prescriptive --- providing personalised AI-driven medical assistance, intelligent document comprehension, empathetic emotional support, longitudinal mental health tracking, and structured consultation management.
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 3: OBJECTIVES
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Objectives}
+
+\begin{itemize}[leftmargin=2em]
+  \item Develop a cross-platform mobile application (Android/iOS/Web) that unifies health guidance, document analysis, consultation tracking, emotional support, and mental health monitoring into a single interface.
+
+  \item Implement a RAG-based Medical Assistant capable of context-aware, multi-turn health conversations grounded in verified medical knowledge, with user medical profile personalisation.
+
+  \item Build an OCR-powered Document Summarisation module that extracts text from handwritten and printed medical documents (prescriptions, lab reports) and generates plain-language AI summaries.
+
+  \item Create a Consultation Tracker enabling users to maintain structured, session-wise records of their medical journey with document attachments, AI-generated session summaries, and exportable PDF reports.
+
+  \item Design an Emotional Buddy (Orbz) with multimodal emotion detection (text + audio) providing empathetic, voice-based emotional support with real-time sentiment analysis.
+
+  \item Construct a Mental Health Tracker dashboard surfacing longitudinal mood trends, emotion distributions, and session analytics derived from Emotional Buddy interactions.
+
+  \item Support multilingual interaction in English, Hindi, and Marathi across all modules including STT, TTS, and LLM responses.
+
+  \item Deploy the backend as a containerised, independently scalable service with offline-capable ML model loading and cloud-hosted vector search.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 4: SYSTEM ARCHITECTURE
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{System Architecture}
+
+The system follows a client-server architecture with clear separation between the mobile frontend and the AI-powered backend.
+
+% ── 4.1 Frontend ──────────────────────────────────────────────────────────────
+\section{Frontend (Client)}
+
+\begin{longtable}{@{}>{\bfseries}p{4cm}p{10cm}@{}}
+\caption{Frontend Architecture Summary}\label{tab:frontend-arch}\\
+\toprule
+\textbf{Aspect} & \textbf{Detail} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Aspect} & \textbf{Detail} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Framework        & Flutter 3.x with Dart SDK $\geq$ 3.5.0 \\
+Pattern          & MVVM with Repository pattern \\
+State Management & Riverpod (providers, notifiers, code generation) \\
+Navigation       & GoRouter with auth-driven redirects \\
+Presentation     & Screens, widgets, notifiers (state controllers) \\
+Data Layer       & Repositories abstracting API calls via Dio HTTP client \\
+Core Layer       & Theme, routing, networking (interceptors, token storage), localisation, reusable widgets \\
+\end{longtable}
+
+% ── 4.2 Backend ───────────────────────────────────────────────────────────────
+\section{Backend (Server)}
+
+\begin{longtable}{@{}>{\bfseries}p{4cm}p{10cm}@{}}
+\caption{Backend Architecture Summary}\label{tab:backend-arch}\\
+\toprule
+\textbf{Aspect} & \textbf{Detail} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Aspect} & \textbf{Detail} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Framework   & FastAPI (Python 3.11) \\
+Hosting     & HuggingFace Spaces (Docker container) \\
+Base URL    & \texttt{https://sg2407-aarogyan.hf.space/api/v1} \\
+Routers     & 9 route modules (auth, profile, consultations, sessions, assistant, documents, buddy, mental\_health, export) \\
+Services    & AI inference, OCR, RAG pipeline, emotion detection, fusion engine, voice features, STT, TTS, session analytics, PDF generation, profile context builder \\
+Auth        & JWT (HS256) with bcrypt password hashing \\
+\end{longtable}
+
+% ── 4.3 Database & Storage ────────────────────────────────────────────────────
+\section{Database \& Storage}
+
+\begin{longtable}{@{}>{\bfseries}p{4cm}p{10cm}@{}}
+\caption{Database and Storage Architecture}\label{tab:db-arch}\\
+\toprule
+\textbf{Component} & \textbf{Detail} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Component} & \textbf{Detail} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Database        & Supabase (PostgreSQL) \\
+Tables          & 8 tables: users, profiles, consultations, sessions, session\_documents, conversations, messages, emotional\_sessions \\
+JSONB Fields    & Medical profiles, emotion probabilities, AI summaries \\
+Triggers        & Automatic \texttt{updated\_at} timestamps \\
+Storage         & Supabase Storage (2 buckets) \\
+Documents Bucket & User-uploaded prescriptions, reports (max 2~MB) \\
+PDFs Bucket     & Pre-built consultation PDF reports (max 10~MB) \\
+\end{longtable}
+
+% ── 4.4 AI & ML Components ───────────────────────────────────────────────────
+\section{AI \& ML Components}
+
+\begin{longtable}{@{}>{\bfseries}p{4cm}p{10cm}@{}}
+\caption{AI and ML Component Summary}\label{tab:ai-components}\\
+\toprule
+\textbf{Component} & \textbf{Technology} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Component} & \textbf{Technology} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+LLM Inference   & Groq API (LLaMA 3.3 70B Versatile) \\
+Vector DB       & Qdrant Cloud (pre-ingested medical knowledge base) \\
+Embedding       & BAAI/bge-small-en-v1.5 (SentenceTransformer) \\
+Reranker        & cross-encoder/ms-marco-MiniLM-L-6-v2 (CrossEncoder) \\
+Text Emotion    & j-hartmann/emotion-english-distilroberta-base (HuggingFace) \\
+Audio Emotion   & superb/wav2vec2-base-superb-er (Speech Emotion Recognition) \\
+OCR             & EasyOCR (English, handles handwritten text) \\
+STT             & Groq Whisper Large v3 Turbo \\
+TTS             & Sarvam AI bulbul:v3 (multilingual: en-IN, hi-IN, mr-IN) \\
+PDF Rendering   & PyMuPDF (fitz) \\
+\end{longtable}
+
+% ── 4.5 Data Flow ────────────────────────────────────────────────────────────
+\section{Data Flow}
+
+\subsection{Overall System Data Flow}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{Application_DataFlow_Diagram.png}
+\caption{Overall system data flow architecture of Aarogyan.}
+\end{figure}
+
+\newpage
+
+\subsection{AI Medical Assistant Data Flow}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{AI_Medical_Assistant_DataFlow_Diagram.png}
+\caption{Data flow of the AI Medical Assistant module.}
+\end{figure}
+
+\newpage
+
+\subsection{Document Summarisation Data Flow}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{Document_Summarization_DataFlow_Diagram.png}
+\caption{Data flow of the Document Summarisation module.}
+\end{figure}
+
+
+
+\subsection{Consultation Tracker Data Flow}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{Consultation_Tracker_DataFlow_Diagram.png}
+\caption{Data flow of the Consultation Tracker module.}
+\end{figure}
+
+
+
+\subsection{Emotional Buddy (Orbz) Data Flow}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{Emotional_Buddy_DataFlow_Diagram.png}
+\caption{Data flow of the Emotional Buddy module.}
+\end{figure}
+
+\newpage
+
+\subsection{Mental Health Tracker Data Flow}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{Mental_Health_Tracker_DataFlow_Diagram.png}
+\caption{Data flow of the Mental Health Tracker module.}
+\end{figure}
+
+\newpage
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 5: TECH STACK
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Tech Stack}
+
+\begin{longtable}{@{}p{4.5cm}p{4cm}p{6cm}@{}}
+\caption{Complete Technology Stack}\label{tab:tech-stack}\\
+\toprule
+\textbf{Category} & \textbf{Sub-Category} & \textbf{Technology} \\
+\midrule
+\endfirsthead
+\caption[]{Complete Technology Stack (continued)}\\
+\toprule
+\textbf{Category} & \textbf{Sub-Category} & \textbf{Technology} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{3}{r}{\textit{Continued on next page}} \\
+\endfoot
+\bottomrule
+\endlastfoot
+Programming Languages & Frontend        & Dart 3.5+ \\
+                      & Backend         & Python 3.11 \\
+                      & Database        & SQL (PostgreSQL via Supabase) \\
+\midrule
+Frameworks            & Mobile/Web      & Flutter 3.x (cross-platform) \\
+                      & Backend API     & FastAPI 0.135.1 \\
+                      & ASGI Server     & Uvicorn 0.42.0 \\
+\midrule
+State Management      & Provider Framework & Riverpod 2.6.1 (with code generation) \\
+                      & Navigation      & GoRouter 14.8.1 \\
+\midrule
+AI / ML Libraries     & LLM Inference   & Groq API (LLaMA 3.3 70B Versatile) \\
+                      & Embeddings      & SentenceTransformers (BAAI/bge-small-en-v1.5) \\
+                      & Reranking       & CrossEncoder (ms-marco-MiniLM-L-6-v2) \\
+                      & Text Emotion    & HuggingFace Transformers (DistilRoBERTa) \\
+                      & Audio Emotion   & HuggingFace Transformers (Wav2Vec2 SUPERB-ER) \\
+                      & OCR             & EasyOCR 1.7.2 \\
+                      & STT             & Groq Whisper Large v3 Turbo \\
+                      & TTS             & Sarvam AI bulbul:v3 \\
+                      & ML Runtime      & PyTorch 2.10.0 (CPU), ONNX Runtime 1.24.4 \\
+                      & Vector Search   & Qdrant Client 1.17.1 \\
+\midrule
+Databases             & Primary DB      & Supabase (PostgreSQL) \\
+                      & Vector DB       & Qdrant Cloud \\
+                      & Encrypted Storage & FlutterSecureStorage (on-device) \\
+\midrule
+Infrastructure        & Containerisation & Docker (python:3.11-slim base) \\
+                      & Hosting         & HuggingFace Spaces \\
+                      & CI/CD           & Codemagic (codemagic.yaml present) \\
+\midrule
+Key Libraries         & HTTP Client (Dart)   & Dio 5.7.0 (with interceptors) \\
+                      & HTTP Client (Python) & httpx 0.28.1 (async) \\
+                      & PDF Generation       & fpdf2 2.8.7, PyMuPDF 1.27.2 \\
+                      & PDF (Flutter)        & pdf 3.11.3, printing 5.14.2 \\
+                      & Charts               & fl\_chart 0.70.2 \\
+                      & Animations           & Lottie 3.3.1, flutter\_animate 4.5.2 \\
+                      & Voice Recording      & record 6.2.0 \\
+                      & Audio Playback       & just\_audio 0.10.4, audioplayers 6.4.0 \\
+                      & VAD                  & vad 0.0.7+1 (Silero model) \\
+                      & Speech-to-Text       & speech\_to\_text 7.0.0 (on-device) \\
+                      & Auth                 & python-jose (JWT), bcrypt 5.0.0 \\
+                      & Validation           & Pydantic 2.12.5 \\
+                      & File Handling        & file\_picker, image\_picker, path\_provider \\
+                      & Permissions          & permission\_handler 11.4.0 \\
+                      & Serialisation        & freezed, json\_serializable \\
+\end{longtable}
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 6: CORE MODULES
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Core Modules (Detailed)}
+
+% ── 6.1 AI Medical Assistant ─────────────────────────────────────────────────
+\section{AI Medical Assistant}
+
+\subsection{Functionality}
+
+A persistent, conversation-based AI health companion that provides personalised, context-aware health guidance. Users conduct multi-turn health conversations that are automatically saved. All past conversations are accessible from a history panel for review, continuation, or deletion. Each new entry opens a fresh conversation, while all prior chats remain available. The assistant is strictly non-prescriptive and non-diagnostic.
+
+\subsection{Technologies Used}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{LLM:} Groq API with LLaMA 3.3 70B Versatile model
+  \item \textbf{RAG Pipeline:} Qdrant Cloud vector search + BAAI/bge-small-en-v1.5 embeddings + ms-marco-MiniLM-L-6-v2 cross-encoder reranker
+  \item \textbf{Query Router:} LLM-based classifier (medical vs non-medical, General vs Detailed complexity)
+  \item \textbf{Profile Context:} Dynamic user medical profile serialised from Supabase and injected into system prompts
+  \item \textbf{Persistence:} Supabase (conversations + messages tables)
+  \item \textbf{Frontend:} Flutter Riverpod providers, Dio HTTP client
+\end{itemize}
+
+\subsection{Input/Output Flow}
+
+\textbf{Input:} User text message + conversation\_id (optional) + preferred\_language (English/Hindi/Marathi).
+
+\textbf{Process:}
+\begin{enumerate}[leftmargin=2em]
+  \item LLM Router classifies query $\rightarrow$ \{medical: bool, route: General$|$Detailed\}
+  \item Non-medical queries receive a polite scope-limitation response
+  \item Medical queries trigger RAG pipeline:
+    \begin{itemize}
+      \item General route: top-8 Qdrant vector search chunks, no reranking
+      \item Detailed route: top-8 fetch $\rightarrow$ cross-encoder rerank $\rightarrow$ top-3 chunks
+    \end{itemize}
+  \item Context threshold filtering ($\geq$0.45 for context, $\geq$0.85 for sources)
+  \item Retrieved context + user profile + conversation history assembled into LLM prompt
+  \item Groq LLM generates response at temperature 0.2 (RAG) or 0.5 (plain)
+  \item Response + source citations returned; conversation auto-saved
+\end{enumerate}
+
+\textbf{Output:} AI response text + source references (book/document names) + conversation\_id + message\_count.
+
+\subsection{Internal Logic}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Two-tier retrieval:} fast vector search for simple queries, cross-encoder reranking for complex queries requiring deep analysis
+  \item \textbf{Safety:} strict system prompt prohibits code generation, drug names, definitive diagnosis; non-medical queries rejected
+  \item \textbf{Context-awareness:} full conversation history (all prior messages) passed to LLM for coherent multi-turn dialogue
+  \item \textbf{User profile:} conditions, allergies, medications, lifestyle injected as persistent background context
+  \item \textbf{Auto-titling:} first user message becomes conversation title
+  \item \textbf{Language detection:} responds in the same language as the user's input
+\end{itemize}
+
+% ── 6.2 Document Summarisation ───────────────────────────────────────────────
+\section{Document Summarisation (OCR + AI)}
+
+\subsection{Functionality}
+
+Users upload medical documents (prescriptions, lab reports, radiology reports) via file picker or camera capture. The system performs OCR-based text extraction followed by AI-powered plain-language summarisation, identifying document type, key findings, medicines, dosages, and instructions. A confidence score reflects OCR quality.
+
+\subsection{Technologies Used}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{OCR Engine:} EasyOCR 1.7.2 (English, supports handwritten text)
+  \item \textbf{PDF Rendering:} PyMuPDF (renders PDF pages to images at 2$\times$ resolution)
+  \item \textbf{Image Processing:} Pillow (PIL), NumPy
+  \item \textbf{LLM:} Groq API (LLaMA 3.3 70B) with structured JSON output
+  \item \textbf{Frontend:} file\_picker, image\_picker, Dio multipart upload
+\end{itemize}
+
+\subsection{Input/Output Flow}
+
+\textbf{Input:} Medical document file (PDF, JPG, or PNG; max 1.5~MB).
+
+\textbf{Process:}
+\begin{enumerate}[leftmargin=2em]
+  \item File uploaded as multipart form data
+  \item Content type resolved (with filename fallback for Dio MIME issues)
+  \item OCR extraction:
+    \begin{itemize}
+      \item Images: EasyOCR readtext with paragraph mode
+      \item PDFs: each page rendered to PNG at 2$\times$ resolution via PyMuPDF, then EasyOCR applied per page
+    \end{itemize}
+  \item Extracted text sent to LLM with DOCUMENT\_SUMMARY\_SYSTEM prompt
+  \item LLM returns structured JSON: \{document\_type, explanation, key\_findings[], confidence\_score, disclaimer\}
+\end{enumerate}
+
+\textbf{Output:} OCR raw text + structured summary (document type, plain-language explanation, key findings list, confidence score 0--100, medical disclaimer).
+
+\subsection{Internal Logic}
+
+\begin{itemize}[leftmargin=2em]
+  \item OCR runs in thread pool (\texttt{asyncio.run\_in\_executor}) to avoid blocking the event loop
+  \item 2$\times$ resolution rendering for PDF pages improves OCR accuracy on small-print clinical documents
+  \item Paragraph mode groups detected text into logical blocks
+  \item LLM instructed to classify document type (Prescription, Blood Report, Radiology Report, Discharge Summary, Lab Report, Other)
+  \item Findings prefixed with warning indicator for values requiring attention
+  \item Confidence score reflects OCR quality: 90+ clean text, 50--89 partial noise, $<$50 heavy OCR errors
+\end{itemize}
+
+% ── 6.3 Consultation Tracker ─────────────────────────────────────────────────
+\section{Consultation Tracker}
+
+\subsection{Functionality}
+
+Enables users to create named consultations representing distinct treatment episodes (e.g., ``Skin Allergy Treatment --- June 2025''). Under each consultation, multiple doctor visit sessions are recorded in chronological order. Each session captures visit date, symptoms, diagnosis, medications, and doctor notes. Users can upload prescriptions and medical documents per session (PDF, JPG, PNG; max 2~MB). The entire consultation history --- including AI-generated session summaries and embedded document images --- can be exported as a professionally formatted PDF report.
+
+\subsection{Technologies Used}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Backend:} FastAPI CRUD endpoints (consultations, sessions, documents)
+  \item \textbf{Storage:} Supabase Storage (documents + pdfs buckets)
+  \item \textbf{OCR:} EasyOCR (automatic text extraction on document upload)
+  \item \textbf{AI Summaries:} Groq LLM generates per-session clinical summaries
+  \item \textbf{PDF Generation:} fpdf2 (Python) with custom styling, PyMuPDF for document image rendering
+  \item \textbf{Frontend:} Flutter screens with Riverpod providers, VoiceTextField (speech-to-text input), GoRouter nested navigation
+\end{itemize}
+
+\subsection{Input/Output Flow}
+
+\textbf{Input:} Consultation name + session details (date, symptoms, diagnosis, medications, notes) + document files.
+
+\textbf{Process:}
+\begin{enumerate}[leftmargin=2em]
+  \item User creates consultation $\rightarrow$ stored in Supabase
+  \item Sessions added with clinical data; each field supports voice input via on-device STT
+  \item Documents uploaded $\rightarrow$ stored in Supabase Storage $\rightarrow$ OCR extraction attempted $\rightarrow$ public URL generated
+  \item On any mutation (session add/update/delete, document change): background PDF rebuild triggered
+  \item PDF rebuild pipeline:
+    \begin{enumerate}[label=\alph*.]
+      \item Fetch full consultation + sessions + documents
+      \item Generate AI summary per session (or reuse cached)
+      \item Render document images (PDF pages $\rightarrow$ PNG, images $\rightarrow$ as-is)
+      \item Build styled PDF with fpdf2 (header, session sections, AI summary boxes, embedded images, page numbers)
+      \item Upload to Supabase Storage (pdfs bucket)
+    \end{enumerate}
+\end{enumerate}
+
+\textbf{Output:} Consultation list/detail views + downloadable PDF report with AI summaries and embedded documents.
+
+\subsection{Internal Logic}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Background PDF generation:} triggered asynchronously on every data mutation; pre-built PDF served instantly on export
+  \item \textbf{Fallback:} if pre-built PDF unavailable, on-demand generation occurs
+  \item \textbf{AI session summaries:} cached in \texttt{sessions.ai\_summary} JSONB column
+  \item \textbf{PDF styling:} teal branding (\texttt{\#1A6B5A}), progression status colours (green=improving, red=worsening, grey=unchanged), disclaimer
+  \item \textbf{Unicode sanitisation:} for latin-1 core fonts (em-dash, smart quotes, bullets mapped to ASCII equivalents)
+  \item \textbf{Ownership verification:} on all CRUD operations
+\end{itemize}
+
+% ── 6.4 Emotional Buddy — Orbz ───────────────────────────────────────────────
+\section{Emotional Buddy --- Orbz}
+
+\subsection{Functionality}
+
+An animated AI companion providing empathetic, voice-based emotional support. Orbz engages users in natural voice conversations, detects emotions from both text content and vocal prosody, resolves conflicts between text and audio signals, and responds with warm, personalised emotional guidance. The system tracks mood scores and emotion probabilities per message, enabling longitudinal mental health analysis. Supports 12 voice personas (6~male, 6~female) via Sarvam AI TTS.
+
+\subsection{Technologies Used}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Text Emotion:} j-hartmann/emotion-english-distilroberta-base (classifies joy, sadness, anger, fear, disgust, surprise, neutral)
+  \item \textbf{Audio Emotion:} superb/wav2vec2-base-superb-er (Wav2Vec2 Speech Emotion Recognition)
+  \item \textbf{Fusion Engine:} Deterministic weighted fusion with 5-rule conflict resolution pipeline and temporal EMA smoothing
+  \item \textbf{Voice Features:} Custom prosodic analysis (pitch/F0 via autocorrelation, RMS energy, speaking rate, jitter) using NumPy + SciPy
+  \item \textbf{STT:} Groq Whisper Large v3 Turbo
+  \item \textbf{TTS:} Sarvam AI bulbul:v3 (12 speakers, multilingual)
+  \item \textbf{LLM:} Groq API (LLaMA 3.3 70B) with Orbz personality prompt
+  \item \textbf{Frontend:} Custom Orb widget with 7 simultaneous animation controllers, VAD (Silero model via vad package), NDJSON stream parsing
+\end{itemize}
+
+\subsection{Input/Output Flow}
+
+\subsubsection{Text Path}
+
+\textbf{Input:} User text + conversation history + preferred language.
+
+\textbf{Process:} Text emotion detection (DistilRoBERTa for English, LLM for Hindi/Marathi) $\rightarrow$ LLM generates empathetic response $\rightarrow$ TTS synthesis $\rightarrow$ session stored.
+
+\textbf{Output:} Buddy response text + mood score (1--10) + emotion label + emotion probabilities + audio (base64 WAV).
+
+\subsubsection{Voice Path (Streaming)}
+
+\textbf{Input:} Audio recording (WAV via on-device VAD + recording).
+
+\textbf{Process:}
+\begin{enumerate}[leftmargin=2em]
+  \item Parallel processing: STT (Groq Whisper) + Audio emotion (Wav2Vec2) + Voice feature extraction (pitch, energy, rate)
+  \item Text emotion detection on transcribed text
+  \item Fusion engine resolves text vs audio emotion conflicts:
+    \begin{itemize}
+      \item Rule~1: Strong keywords $\rightarrow$ boost text weight to 85\%
+      \item Rule~2: Text=neutral, Audio=emotional $\rightarrow$ trust audio 80\%
+      \item Rule~3: Audio much more confident $\rightarrow$ boost audio to 70\%
+      \item Rule~4: Both low confidence $\rightarrow$ inherit previous session
+      \item Rule~5: Temporal EMA smoothing (prevent sudden flips)
+    \end{itemize}
+  \item Voice analysis context injected into LLM prompt
+  \item LLM generates response (sentence-by-sentence streaming)
+  \item TTS synthesis per sentence (parallel with generation)
+\end{enumerate}
+
+\textbf{Output:} NDJSON stream events: transcript $\rightarrow$ sentence $\rightarrow$ audio $\rightarrow$ done. Session stored with fused emotion probabilities.
+
+\subsection{Internal Logic}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Emotion normalisation:} labels normalised to 4 categories: happy, sad, angry, neutral (mapped from 7 raw model labels)
+  \item \textbf{Stateful fusion:} engine tracks previous segment's emotion for temporal smoothing (EMA $\alpha$=0.65 for consistent state, 0.35 for resisting sudden flips)
+  \item \textbf{Voice context:} prosodic features provide context to the LLM without exposing technical details in the response (e.g., ``It seems like there might be more beneath the surface\ldots'' instead of ``your voice sounds sad'')
+  \item \textbf{VAD parameters:} 20 frames ($\sim$1.92s) silence threshold, 5 frames ($\sim$480ms) minimum speech, 1.5s post-speech wait, 60s hard cap
+  \item \textbf{Orb widget:} breathing, rotation, ripple, colour-morphing animations driven by conversation phase (idle $\rightarrow$ listening $\rightarrow$ processing $\rightarrow$ playing)
+  \item \textbf{Safety:} self-harm detection with compassionate crisis helpline guidance
+  \item \textbf{Non-English:} text emotion via LLM classification since DistilRoBERTa is English-only; audio emotion model is language-agnostic
+\end{itemize}
+
+% ── 6.5 Mental Health Tracker ─────────────────────────────────────────────────
+\section{Mental Health Tracker}
+
+\subsection{Functionality}
+
+A visual analytics dashboard surfacing mood and emotional well-being trends over time, derived entirely from Emotional Buddy session data. Provides daily, weekly, and monthly mood trends, emotion distribution charts, mood heatmaps, per-conversation stability analysis, and personalised insight summaries.
+
+\subsection{Technologies Used}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Backend:} Session analytics service (pure statistics, no ML models)
+  \item \textbf{Charts:} fl\_chart (line charts, donut charts, bar charts)
+  \item \textbf{Frontend:} Flutter dashboard with multiple visualisation widgets, configurable time filters (7/30/90 days, all-time)
+  \item \textbf{Data Source:} \texttt{emotional\_sessions} table (mood\_score, emotion, emotion\_probs JSONB)
+\end{itemize}
+
+\subsection{Input/Output Flow}
+
+\textbf{Input:} Time filter (days: 7, 30, 90, or 0 for all-time).
+
+\textbf{Process:}
+\begin{enumerate}[leftmargin=2em]
+  \item Fetch emotional sessions for user within date range
+  \item Compute aggregations:
+    \begin{itemize}
+      \item Total sessions, average mood overall
+      \item Latest session (hero card with emotion + mood score)
+      \item Emotion distribution (count per label)
+      \item Daily/weekly/monthly average mood
+      \item Heatmap data (date, mood, count)
+      \item Per-conversation analytics: dominant emotion, stability score, volatility, upward/downward transitions, insight summary
+    \end{itemize}
+  \item Session analytics engine computes trend (start/middle/end phases), stability score (0--100), insight generation
+\end{enumerate}
+
+\textbf{Output:} Dashboard JSON with total\_sessions, average\_mood, latest\_session, emotion\_distribution, dominant\_emotion, conversation\_sessions[], daily[], weekly[], monthly[], heatmap[].
+
+\subsection{Internal Logic}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Stability score:} $100 \times (1 - \text{volatility} \;/\; \text{total\_messages})$
+  \item \textbf{Emotional trend:} conversation split into 3 phases (start, middle, end) with averaged probabilities per phase
+  \item \textbf{Valence mapping:} happy = +2, neutral = 0, sad = $-$2, angry = $-$2
+  \item \textbf{Insight generation:} compares start vs end valence to determine progression direction; handles high-volatility and stable-positive cases separately
+  \item \textbf{Frontend remapping:} backend labels fearful$\rightarrow$sad, disgusted$\rightarrow$angry, surprised$\rightarrow$happy for consistent 4-label display
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 7: METRICS & PERFORMANCE INDICATORS
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Metrics \& Performance Indicators}
+
+\textit{Note: All metrics below are estimated based on implementation analysis and documented model benchmarks. They have not been formally benchmarked on production data.}
+
+% ── 7.1 ──────────────────────────────────────────────────────────────────────
+\section{AI Medical Assistant}
+
+\begin{longtable}{@{}p{4.5cm}p{4.5cm}p{5.5cm}@{}}
+\caption{AI Medical Assistant --- Performance Metrics (Estimated)}\label{tab:metrics-assistant}\\
+\toprule
+\textbf{Metric} & \textbf{Estimate} & \textbf{Basis} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Metric} & \textbf{Estimate} & \textbf{Basis} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Response relevance         & $\sim$85--90\% (RAG-augmented) & bge-small-en-v1.5 + cross-encoder reranking on vetted medical corpus \\
+Response latency           & 2--5s (General route); 4--8s (Detailed route) & Vector search + single LLM call via Groq (fast inference) \\
+Query classification accuracy & $\sim$92--95\% & LLM-based router with structured JSON output \\
+Concurrent users           & $\sim$50--100 (single worker) & Limited by Groq API rate limits and HF Spaces RAM \\
+\end{longtable}
+
+% ── 7.2 ──────────────────────────────────────────────────────────────────────
+\newpage
+\section{Document Summarisation}
+
+\begin{longtable}{@{}p{4.5cm}p{4.5cm}p{5.5cm}@{}}
+\caption{Document Summarisation --- Performance Metrics (Estimated)}\label{tab:metrics-docs}\\
+\toprule
+\textbf{Metric} & \textbf{Estimate} & \textbf{Basis} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Metric} & \textbf{Estimate} & \textbf{Basis} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+OCR accuracy (printed)      & $\sim$90--95\%       & EasyOCR benchmarks on clear printed English text \\
+OCR accuracy (handwritten)  & $\sim$60--75\%       & EasyOCR handwriting mode; varies with legibility \\
+Processing time (image)     & 3--8s                & EasyOCR on single image (CPU) \\
+Processing time (PDF)       & 5--30s (per page)    & 2$\times$ render + OCR per page on CPU \\
+Summary accuracy            & $\sim$85--90\%       & LLM summarisation quality on clean OCR output \\
+Confidence calibration      & Reasonable           & LLM self-assessed; correlates with OCR text quality \\
+\end{longtable}
+
+% ── 7.3 ──────────────────────────────────────────────────────────────────────
+\section{Consultation Tracker}
+
+\begin{longtable}{@{}p{4.5cm}p{4.5cm}p{5.5cm}@{}}
+\caption{Consultation Tracker --- Performance Metrics (Estimated)}\label{tab:metrics-consult}\\
+\toprule
+\textbf{Metric} & \textbf{Estimate} & \textbf{Basis} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Metric} & \textbf{Estimate} & \textbf{Basis} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+CRUD response time      & $<$500ms       & Direct Supabase queries with indexes \\
+PDF generation time     & 2--10s         & Depends on session count and document images; background pre-generation \\
+Document upload + OCR   & 3--15s         & File upload + EasyOCR extraction \\
+Data integrity          & High           & Foreign key constraints, cascading deletes \\
+\end{longtable}
+
+% ── 7.4 ──────────────────────────────────────────────────────────────────────
+\newpage
+\section{Emotional Buddy (Orbz)}
+
+\begin{longtable}{@{}p{4.5cm}p{4.5cm}p{5.5cm}@{}}
+\caption{Emotional Buddy --- Performance Metrics (Estimated)}\label{tab:metrics-buddy}\\
+\toprule
+\textbf{Metric} & \textbf{Estimate} & \textbf{Basis} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Metric} & \textbf{Estimate} & \textbf{Basis} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Text emotion accuracy (English) & $\sim$82--87\%   & DistilRoBERTa benchmark on GoEmotions dataset \\
+Audio emotion accuracy          & $\sim$65--72\%   & Wav2Vec2 SUPERB-ER benchmark; real-world degradation expected \\
+Fused emotion accuracy          & $\sim$75--85\% (estimated) & Fusion engine conflict resolution improves over single modality \\
+Voice processing latency        & 3--6s (end-to-end) & STT + emotion + features + LLM + TTS pipeline \\
+TTS latency (per chunk)         & 0.5--1.5s        & Sarvam AI API response time \\
+Streaming first-byte            & 2--4s            & STT + first LLM sentence + TTS \\
+\end{longtable}
+
+% ── 7.5 ──────────────────────────────────────────────────────────────────────
+\section{Mental Health Tracker}
+
+\begin{longtable}{@{}p{4.5cm}p{4.5cm}p{5.5cm}@{}}
+\caption{Mental Health Tracker --- Performance Metrics (Estimated)}\label{tab:metrics-mental}\\
+\toprule
+\textbf{Metric} & \textbf{Estimate} & \textbf{Basis} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Metric} & \textbf{Estimate} & \textbf{Basis} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Dashboard load time      & 1--3s          & Supabase query + aggregation \\
+Analytics computation    & $<$100ms       & Pure Python math (no ML models) \\
+Stability score accuracy & High (deterministic) & Based on label transition count \\
+\end{longtable}
+
+% ── 7.6 ──────────────────────────────────────────────────────────────────────
+\newpage
+\section{Scalability Aspects}
+
+\begin{itemize}[leftmargin=2em]
+  \item Backend is stateless (no in-memory user sessions); horizontal scaling feasible by adding workers/replicas.
+  \item ML models lazy-loaded as singletons; memory footprint $\sim$2--3~GB total.
+  \item Vector search offloaded to Qdrant Cloud (independently scalable).
+  \item LLM inference offloaded to Groq API (no local GPU required).
+  \item Database and storage on Supabase (managed PostgreSQL; auto-scaling).
+  \item Docker containerisation enables deployment portability.
+  \item Current bottleneck: single-worker HuggingFace Spaces deployment; production would require dedicated infrastructure.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 8: IMPLEMENTATION STATUS
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Implementation Status}
+
+\begin{longtable}{@{}c >{\raggedright}p{4.2cm} c p{6.5cm}@{}}
+\caption{Feature Implementation Status}\label{tab:impl-status}\\
+\toprule
+\textbf{No.} & \textbf{Feature} & \textbf{Status} & \textbf{Remarks} \\
+\midrule
+\endfirsthead
+\caption[]{Feature Implementation Status (continued)}\\
+\toprule
+\textbf{No.} & \textbf{Feature} & \textbf{Status} & \textbf{Remarks} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{\textit{Continued on next page}} \\
+\endfoot
+\bottomrule
+\endlastfoot
+1  & User Authentication (Signup, Login, JWT) & Completed & Email/password signup \& login with JWT tokens, bcrypt hashing, T\&C consent tracking \\
+\midrule
+2  & User Profile Management & Completed & Comprehensive medical profile with 6 sections: personal, medical, lifestyle, medications, mental health, vitals; JSONB storage \\
+\midrule
+3  & AI Medical Assistant & Completed & RAG pipeline with vector search, cross-encoder reranking, LLM router, profile personalisation, conversation persistence, multilingual support \\
+\midrule
+4  & Document Summarisation (OCR + AI Summary) & Completed & EasyOCR + LLM summary, supports PDF/JPG/PNG, structured JSON output with confidence scoring, camera capture support \\
+\midrule
+5  & Consultation Tracker & Completed & Full CRUD for consultations, sessions, documents; voice input for forms; background PDF generation with AI summaries and embedded documents \\
+\midrule
+6  & Emotional Buddy (Orbz) & Completed & Text + voice chat with multimodal emotion detection, fusion engine, NDJSON streaming, 12 voice personas, animated orb widget, VAD, session analytics \\
+\midrule
+7  & Mental Health Tracker & Completed & Dashboard with mood trend lines, emotion donut charts, heatmap calendar, session bar charts, per-conversation stability analysis, insight generation \\
+\midrule
+8  & Multilingual Support & Completed & English, Hindi, Marathi across UI strings, LLM responses, STT, and TTS \\
+\midrule
+9  & PDF Export & Completed & Background pre-generation with on-demand fallback; styled report with AI summaries, embedded images, progression indicators \\
+\midrule
+10 & Backend Deployment & Completed & Docker containerised on HuggingFace Spaces with pre-downloaded ML models, offline runtime mode \\
+\midrule
+11 & Theme System (Light/Dark) & Completed & Material3 theming with persistent preference \\
+\midrule
+12 & Voice Activity Detection & Completed & Silero VAD model with calibrated thresholds for natural conversation \\
+\midrule
+13 & Voice Feature Extraction & Completed & Pitch (F0), energy, speaking rate, jitter analysis via NumPy/SciPy \\
+\midrule
+14 & Formal Testing Suite & Partial & Only default widget test present; no unit or integration tests for backend or feature-level frontend tests \\
+\midrule
+\end{longtable}
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 9: RESULTS & OUTCOMES
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Results \& Outcomes}
+
+\section{Successfully Built Components}
+
+All five core modules specified in the project scope have been fully implemented and integrated into a cohesive, functional application:
+
+\begin{enumerate}[label=(\alph*), leftmargin=2em]
+  \item The \textbf{AI Medical Assistant} delivers RAG-augmented, profile-personalised health guidance with two-tier retrieval (fast general + accurate detailed) and strict safety guardrails preventing diagnostic/prescriptive outputs.
+
+  \item The \textbf{Document Summarisation} module successfully processes printed and handwritten medical documents through a pipeline of OCR extraction, structured AI analysis, and plain-language explanation with confidence scoring.
+
+  \item The \textbf{Consultation Tracker} provides a complete longitudinal treatment management system with voice-enabled data entry, document attachments, AI-generated session summaries, and professionally formatted PDF exports.
+
+  \item The \textbf{Emotional Buddy (Orbz)} achieves a sophisticated multimodal emotional support experience combining voice activity detection, speech-to-text, dual-modality emotion detection (text + audio), deterministic fusion with temporal smoothing, empathetic LLM responses, and real-time sentence-by-sentence TTS streaming --- all driven by an animated orb interface.
+
+  \item The \textbf{Mental Health Tracker} aggregates emotional session data into actionable visualisations including mood trend lines, emotion distributions, heatmap calendars, and per-conversation stability analyses with generated insight summaries.
+\end{enumerate}
+\newpage
+\section{Integration Level}
+
+The application demonstrates a high degree of vertical and horizontal integration:
+
+\begin{itemize}[leftmargin=2em]
+  \item All modules share a common authentication layer (JWT) and user profile context, enabling personalised experiences across features.
+  \item The Emotional Buddy feeds data directly into the Mental Health Tracker, creating a closed-loop emotional wellness monitoring system.
+  \item The Consultation Tracker integrates OCR, AI summarisation, and PDF generation into a seamless document management workflow.
+  \item A unified design system (DM Sans typography, teal-accent colour scheme, consistent component library) provides visual coherence across all screens.
+  \item The backend exposes a well-structured REST API (9 routers, 30+ endpoints) consumed through a consistent repository pattern on the frontend.
+\end{itemize}
+
+\section{Real-World Usability}
+
+\begin{itemize}[leftmargin=2em]
+  \item The application is deployable and functional: the backend is live on HuggingFace Spaces, the frontend builds for Android, iOS, and web.
+  \item Multilingual support (English, Hindi, Marathi) addresses linguistic diversity in the target demographic.
+  \item Voice input for consultation forms and full voice-based emotional support improve accessibility for elderly and less tech-literate users.
+  \item Offline-capable ML models (pre-downloaded at build time) ensure consistent AI service availability.
+  \item The application operates strictly as a precautionary tool, with clear disclaimers and safety guardrails at every AI touchpoint.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 10: CHALLENGES FACED
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Challenges Faced}
+
+\section{OCR Limitations}
+
+\begin{itemize}[leftmargin=2em]
+  \item Handwritten medical document OCR accuracy remains a significant challenge. EasyOCR handles basic handwriting but accuracy degrades substantially with poor penmanship, typical of many clinical prescriptions.
+  \item PDF documents require page-by-page rendering to images before OCR, increasing processing time proportionally with page count.
+  \item The 2$\times$ resolution rendering was introduced to improve accuracy on small-print clinical documents but increases computational cost.
+\end{itemize}
+
+\section{Model Constraints}
+
+\begin{itemize}[leftmargin=2em]
+  \item All ML models (DistilRoBERTa, Wav2Vec2, SentenceTransformer, CrossEncoder, EasyOCR) run on CPU, limiting inference throughput and increasing latency.
+  \item The emotion detection model (DistilRoBERTa) is English-only, requiring a fallback to LLM-based classification for Hindi and Marathi --- which is slower and potentially less accurate for emotion tasks.
+  \item Audio emotion recognition (Wav2Vec2 SUPERB-ER) has lower accuracy ($\sim$65--72\%) than text emotion, necessitating the fusion engine to arbitrate conflicts.
+  \item Memory footprint of all loaded models ($\sim$2--3~GB) constrains deployment to environments with sufficient RAM.
+\end{itemize}
+\newpage
+\section{Integration Issues}
+
+\begin{itemize}[leftmargin=2em]
+  \item Flutter's Dio HTTP client sends incorrect MIME types for certain file uploads, requiring server-side content type resolution from filenames.
+  \item NDJSON streaming for voice chat required custom parsing on both backend (StreamingResponse with sentence-by-sentence TTS) and frontend (byte-level stream parsing with event dispatch).
+  \item Background PDF generation required careful orchestration: asynchronous task firing, status tracking (none/processing/ready), storage management with upsert/remove fallbacks for different Supabase versions, and graceful degradation to on-demand generation.
+  \item Voice Activity Detection tuning was non-trivial: balancing sensitivity (minimum speech frames) against false positive reduction (silence threshold, post-speech delay) for natural conversational flow.
+\end{itemize}
+
+\section{Deployment Constraints}
+
+\begin{itemize}[leftmargin=2em]
+  \item HuggingFace Spaces provides limited resources (CPU-only, single worker), restricting concurrent user capacity and inference performance.
+  \item ML model pre-downloading at Docker build time is necessary to avoid runtime download failures but increases image size significantly.
+  \item Sarvam AI TTS has a 500-character limit per request, requiring text chunking at sentence boundaries for longer responses.
+\end{itemize}
+
+\section{Multilingual Challenges}
+
+\begin{itemize}[leftmargin=2em]
+  \item Emotion detection accuracy for non-English languages is lower due to reliance on LLM-based classification instead of dedicated models.
+  \item Voice feature analysis (pitch, energy thresholds) uses gender-neutral thresholds that may not be optimal for all user demographics.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 11: FUTURE SCOPE
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Future Scope}
+
+Based on the current architecture and identified limitations, the following improvements are recommended:
+
+\begin{enumerate}[label=(\alph*), leftmargin=2em]
+  \item \textbf{GPU-Accelerated Deployment:} Migrate backend to GPU-enabled infrastructure (e.g., AWS/GCP with CUDA) to reduce ML inference latency and support higher concurrent load.
+
+  \item \textbf{Multilingual Emotion Models:} Train or fine-tune emotion detection models for Hindi and Marathi to replace LLM-based fallback classification, improving accuracy and reducing latency.
+
+  \item \textbf{Enhanced OCR:} Integrate specialised medical OCR models (e.g., TrOCR fine-tuned on medical handwriting) to improve prescription recognition accuracy beyond EasyOCR's general-purpose capabilities.
+
+  \item \textbf{Push Notifications:} Add medication reminders, appointment alerts, and mental health check-in prompts via Firebase Cloud Messaging.
+
+  \item \textbf{Wearable Integration:} Connect with health wearables (smartwatches, fitness bands) to ingest real-time vitals (heart rate, SpO2, sleep data) into the user profile for enhanced AI personalisation.
+
+  \item \textbf{Doctor Portal:} Build a clinician-facing interface allowing doctors to review shared consultation records and annotate sessions.
+
+  \item \textbf{Supabase Row-Level Security:} Enable RLS policies and migrate from service role key to anon key with per-user policies for defence-in-depth data isolation.
+
+  \item \textbf{Offline Mode:} Implement local caching and sync mechanisms so core features (consultation viewing, cached conversations) remain accessible without network connectivity.
+
+  \item \textbf{Regional Language Expansion:} Extend multilingual support to additional Indian languages (Tamil, Telugu, Bengali, Kannada) to broaden accessibility across the country.
+
+  \item \textbf{Formal Clinical Validation:} Partner with healthcare institutions to validate AI-generated summaries and health guidance against clinical standards.
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════════════════════
+% CHAPTER 12: CONCLUSION
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{Conclusion}
+
+Aarogyan demonstrates a comprehensive, production-grade approach to addressing critical gaps in healthcare accessibility, health literacy, and emotional well-being. The project successfully delivers a unified platform integrating five distinct AI-powered modules --- Medical Assistant, Document Summarisation, Consultation Tracker, Emotional Buddy, and Mental Health Tracker --- within a cohesive, multilingual mobile application.
+
+The technical implementation showcases sophisticated engineering across multiple domains: Retrieval-Augmented Generation with two-tier vector retrieval and cross-encoder reranking for accurate medical guidance; multimodal emotion detection combining NLP (DistilRoBERTa) and speech analysis (Wav2Vec2) through a deterministic fusion engine with temporal smoothing; real-time voice interaction with VAD, streaming TTS, and prosodic feature extraction; and intelligent document processing combining OCR with LLM-powered summarisation.
+
+The system architecture reflects sound software engineering principles: separation of concerns between frontend and backend, repository pattern with reactive state management (Riverpod), RESTful API design across 30+ endpoints, relational database design with JSONB flexibility, and Docker-containerised deployment with pre-cached ML models.
+
+All five core modules and supporting infrastructure (authentication, profiles, multilingual support, voice interaction, PDF export, theme management) have been implemented to functional completion. The application is deployed and operational, with the backend serving live API requests from HuggingFace Spaces and the frontend building for Android, iOS, and web platforms.
+
+Aarogyan stands as a meaningful contribution toward democratising healthcare assistance through AI --- particularly for underserved populations in India who face barriers of language, literacy, and access. While opportunities for enhancement remain (GPU deployment, expanded language support, clinical validation), the current implementation establishes a robust foundation capable of delivering tangible value to users seeking accessible, trustworthy, and empathetic health companionship.
+
+% ══════════════════════════════════════════════════════════════════════════════
+% ANNEXURE: SYSTEM DEMONSTRATION
+% ══════════════════════════════════════════════════════════════════════════════
+\appendix
+\chapter{Annexure: System Demonstration}
+
+This annexure contains placeholder figures for screenshots and visual demonstrations of each major module. Replace the placeholder boxes with actual screenshots during final submission.
+
+% ── A.1 Authentication & Onboarding ──────────────────────────────────────────
+
+
+\section{Authentication \& Onboarding}
+
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{login.jpeg}
+    \captionof{figure}{: User Login screen.}
+    \label{fig:login}
+\end{minipage}
+\hfill
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{signup.jpeg}
+    \captionof{figure}{: User registration Screen.}
+    \label{fig:signup}
+\end{minipage}
+\hfill
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{terms.jpeg}
+    \captionof{figure}{: Terms And Conditions Screen.}
+    \label{fig:profile-setup}
+\end{minipage}
+
+\end{figure}
+
+% ── A.2 Home Dashboard ───────────────────────────────────────────────────────
+\section{Home Dashboard}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{dashboard.jpeg}
+\caption{Home dashboard displaying quick action cards and feature navigation tiles.}
+\label{fig:home-dashboard}
+\end{figure}
+
+
+% ── A.3 AI Medical Assistant ─────────────────────────────────────────────────
+\section{AI Medical Assistant}
+
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{history.jpeg}
+\captionof{figure}{: Medical Assistant conversation list.}
+\label{fig:assistant-list}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{chat.jpeg}
+\captionof{figure}{: Multi-turn conversation with medical assistant.}
+\label{fig:assistant-chat}
+\end{minipage}
+
+\end{figure}
+
+
+% ── A.4 Document Summarisation ───────────────────────────────────────────────
+\section{Document Summarisation}
+
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{docscan1.jpeg}
+\captionof{figure}{: Document upload screen.}
+\label{fig:doc-upload}
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{docscan2.jpeg}
+\captionof{figure}{: AI-generated summary.}
+\label{fig:doc-summary-1}
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{docscan3.jpeg}
+\captionof{figure}{: Key Findings and confidence score.}
+\label{fig:doc-summary-2}
+\end{minipage}
+
+\end{figure}
+
+
+% ── A.5 Consultation Tracker ─────────────────────────────────────────────────
+\section{Consultation Tracker}
+
+% -------- PAGE 1 --------
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{consultation1.jpeg}
+\captionof{figure}{: Consultations Screen.}
+\label{fig:consult-1}
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{consultation2.jpeg}
+\captionof{figure}{: Creating Consultation.}
+\label{fig:consult-2}
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{consultation3.jpeg}
+\captionof{figure}{: Creating Session.}
+\label{fig:consult-3}
+\end{minipage}
+
+\end{figure}
+
+\newpage
+
+% -------- PAGE 2 --------
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{consultation4.jpeg}
+\captionof{figure}{: Session Timeline Screen.}
+\label{fig:consult-4}
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{consultation5.jpeg}
+\captionof{figure}{: PDF Generated With Session Data and Uploaded Documents - 1}
+\label{fig:consult-5}
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{consultation6.jpeg}
+\captionof{figure}{: PDF Generated With Session Data and Uploaded Documents - 2}
+\label{fig:consult-6}
+\end{minipage}
+
+\end{figure}
+
+
+% ── A.6 Emotional Buddy (Orbz) ──────────────────────────────────────────────
+\section{Emotional Buddy (Orbz)}
+
+% -------- PAGE 1 --------
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{emotional1.jpeg}
+\captionof{figure}{Emotional Buddy idle screen.}
+\label{fig:buddy-idle}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{emotional2.jpeg}
+\captionof{figure}{Voice persona selection interface showing multiple speakers}
+\label{fig:buddy-listening}
+\end{minipage}
+
+\end{figure}
+
+\newpage
+
+% -------- PAGE 2 --------
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{emotional3.jpeg}
+\captionof{figure}{Orbz in active thinking state}
+\label{fig:buddy-voices}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{emotional4.jpeg}
+\captionof{figure}{Emotional Buddy speaking state.}
+\label{fig:buddy-response}
+\end{minipage}
+
+\end{figure}
+
+
+% ── A.7 Mental Health Tracker ────────────────────────────────────────────────
+\section{Mental Health Tracker}
+
+% -------- PAGE 1 (2 Images) --------
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{mental1.jpeg}
+\captionof{figure}{Mental Health Dashboard 1}
+\label{fig:mental-overview}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{mental2.jpeg}
+\captionof{figure}{Mental Health Dashboard 2}
+\label{fig:mental-charts}
+\end{minipage}
+
+\end{figure}
+
+\newpage
+
+% -------- PAGE 2 (1 Image) --------
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\textwidth]{mental3.jpeg}
+\caption{Mental Health Dashboard 3}
+\label{fig:mental-heatmap}
+\end{figure}
+
+
+% ── A.8 User Profile ────────────────────────────────────────────────────────
+\section{User Profile Management}
+
+% -------- PAGE 1 (3 Images) --------
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{profile1.jpeg}
+\captionof{figure}{User profile Dashboard 1}
+\label{fig:profile-1}
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{profile2.jpeg}
+\captionof{figure}{User profile Dashboard 2}
+\label{fig:profile-2}
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\textwidth}
+\centering
+\includegraphics[width=\textwidth]{profile3.jpeg}
+\captionof{figure}{User profile Dashboard 3}
+\label{fig:profile-3}
+\end{minipage}
+
+\end{figure}
+
+\newpage
+
+% -------- PAGE 2 (2 Images) --------
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{profile4.jpeg}
+\captionof{figure}{User profile Dashboard 4}
+\label{fig:profile-4}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{profile5.jpeg}
+\captionof{figure}{User profile Dashboard 5}
+\label{fig:profile-5}
+\end{minipage}
+
+\end{figure}
+
+
+\end{document}

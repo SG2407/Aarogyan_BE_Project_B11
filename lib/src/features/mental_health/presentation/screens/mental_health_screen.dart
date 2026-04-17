@@ -6,6 +6,9 @@ import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/profile/data/profile_repository.dart';
 import '../../data/mental_health_repository.dart';
+import '../../../onboarding/presentation/guided_tour_provider.dart';
+import '../../../onboarding/presentation/screen_keys.dart';
+import '../../../onboarding/presentation/tour_trigger.dart';
 
 // ─── Emotion meta ─────────────────────────────────────────────────────────────
 class _EmotionMeta {
@@ -30,6 +33,7 @@ class MentalHealthScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dashboardAsync = ref.watch(mentalHealthDashboardProvider);
     final lang = ref.watch(preferredLanguageProvider);
+    final mhKeys = ref.watch(mentalHealthScreenKeysProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -41,12 +45,17 @@ class MentalHealthScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: dashboardAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _ErrorState(
-            lang: lang,
-            onRetry: () => ref.invalidate(mentalHealthDashboardProvider)),
-        data: (data) => _Dashboard(data: data, lang: lang),
+      body: Stack(
+        children: [
+          dashboardAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => _ErrorState(
+                lang: lang,
+                onRetry: () => ref.invalidate(mentalHealthDashboardProvider)),
+            data: (data) => _Dashboard(data: data, lang: lang, keys: mhKeys),
+          ),
+          const TourTrigger(phase: TourPhase.mentalHealth),
+        ],
       ),
     );
   }
@@ -56,7 +65,8 @@ class MentalHealthScreen extends ConsumerWidget {
 class _Dashboard extends ConsumerWidget {
   final Map<String, dynamic> data;
   final String lang;
-  const _Dashboard({required this.data, required this.lang});
+  final MentalHealthScreenKeys keys;
+  const _Dashboard({required this.data, required this.lang, required this.keys});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -72,6 +82,7 @@ class _Dashboard extends ConsumerWidget {
         '[MentalHealth] total=$total daily=${daily.length} heatmap=${heatmap.length} emotions=$emotionDist');
 
     return ListView(
+      key: keys.bodyKey,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       children: [
         // ── Hero: Latest Emotion Card (#9) ─────────────────────────────────
@@ -82,6 +93,7 @@ class _Dashboard extends ConsumerWidget {
 
         // ── Stat cards ─────────────────────────────────────────────────────
         Row(
+          key: keys.statsKey,
           children: [
             Expanded(
               child: _StatCard(

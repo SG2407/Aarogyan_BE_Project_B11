@@ -7,6 +7,9 @@ import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/profile/data/profile_repository.dart';
 import '../../data/document_repository.dart';
+import '../../../onboarding/presentation/guided_tour_provider.dart';
+import '../../../onboarding/presentation/screen_keys.dart';
+import '../../../onboarding/presentation/tour_trigger.dart';
 
 class DocumentResult {
   final String fileName;
@@ -39,15 +42,19 @@ class DocumentScreen extends ConsumerWidget {
     final result = ref.watch(_documentResultProvider);
     final loading = ref.watch(_loadingProvider);
     final lang = ref.watch(preferredLanguageProvider);
+    final keys = ref.watch(documentScreenKeysProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(appStr(lang, 'document_scanner'))),
-      body: result == null
+      body: Stack(
+        children: [
+          result == null
           ? _UploadPrompt(
               lang: lang,
               loading: loading,
               onPickFile: () => _pickFile(context, ref),
               onCamera: () => _takePhoto(context, ref),
+              keys: keys,
             )
           : _ResultView(
               lang: lang,
@@ -55,6 +62,9 @@ class DocumentScreen extends ConsumerWidget {
               onScanAnother: () =>
                   ref.read(_documentResultProvider.notifier).state = null,
             ),
+          const TourTrigger(phase: TourPhase.documents),
+        ],
+      ),
     );
   }
 
@@ -150,12 +160,14 @@ class _UploadPrompt extends StatelessWidget {
   final bool loading;
   final VoidCallback onPickFile;
   final VoidCallback onCamera;
+  final DocumentScreenKeys keys;
 
   const _UploadPrompt({
     required this.lang,
     required this.loading,
     required this.onPickFile,
     required this.onCamera,
+    required this.keys,
   });
 
   @override
@@ -181,6 +193,7 @@ class _UploadPrompt extends StatelessWidget {
                 style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 12),
             Text(
+              key: keys.descriptionKey,
               appStr(lang, 'scan_desc'),
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
@@ -203,6 +216,7 @@ class _UploadPrompt extends StatelessWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
+                      key: keys.cameraButtonKey,
                       onPressed: onCamera,
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -216,6 +230,7 @@ class _UploadPrompt extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
+                      key: keys.uploadButtonKey,
                       onPressed: onPickFile,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),

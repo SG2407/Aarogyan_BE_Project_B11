@@ -4,37 +4,77 @@ import 'package:go_router/go_router.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../profile/data/profile_repository.dart';
+import '../onboarding/data/onboarding_repository.dart';
+import '../onboarding/presentation/guided_tour_provider.dart';
+import '../onboarding/presentation/guided_tour_dialog.dart';
+import '../onboarding/presentation/screen_keys.dart';
+import '../onboarding/presentation/tour_trigger.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  bool _promptChecked = false;
+
+  @override
+  Widget build(BuildContext context) {
     final lang = ref.watch(preferredLanguageProvider);
+    final keys = ref.watch(homeScreenKeysProvider);
+
+    // Check for first-time tour prompt
+    if (!_promptChecked) {
+      _promptChecked = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkAndShowTourPrompt();
+      });
+    }
     return Scaffold(
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.all(24),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  _buildHeader(context, lang),
-                  const SizedBox(height: 32),
-                  _buildQuickActions(context, lang),
-                  const SizedBox(height: 24),
-                  _buildFeatureCards(context, lang),
-                ]),
-              ),
+        child: Stack(
+          children: [
+            CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.all(24),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      _buildHeader(context, lang, keys),
+                      const SizedBox(height: 32),
+                      _buildQuickActions(context, lang, keys),
+                      const SizedBox(height: 24),
+                      _buildFeatureCards(context, lang, keys),
+                    ]),
+                  ),
+                ),
+              ],
             ),
+            const TourTrigger(phase: TourPhase.home),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context, String lang) {
+  Future<void> _checkAndShowTourPrompt() async {
+    final repo = ref.read(onboardingRepositoryProvider);
+    final justRegistered = await repo.isJustRegistered();
+    final tourCompleted = await repo.isTourCompleted();
+    if (justRegistered && !tourCompleted && mounted) {
+      await repo.setJustRegistered(false);
+      final wantsTour = await showGuidedTourDialog(context);
+      if (wantsTour && mounted) {
+        ref.read(guidedTourProvider.notifier).startTour();
+      }
+    }
+  }
+
+  Widget _buildHeader(BuildContext context, String lang, HomeScreenKeys keys) {
     return Column(
+      key: keys.headerKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
@@ -68,11 +108,12 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildQuickActions(BuildContext context, String lang) {
+  Widget _buildQuickActions(BuildContext context, String lang, HomeScreenKeys keys) {
     return Row(
       children: [
         Expanded(
           child: _QuickActionCard(
+            key: keys.askAiKey,
             icon: Icons.chat_bubble_rounded,
             label: appStr(lang, 'home_ask'),
             color: AppColors.primary,
@@ -82,6 +123,7 @@ class HomeScreen extends ConsumerWidget {
         const SizedBox(width: 12),
         Expanded(
           child: _QuickActionCard(
+            key: keys.scanDocKey,
             icon: Icons.document_scanner_rounded,
             label: appStr(lang, 'home_scan'),
             color: AppColors.accent,
@@ -92,7 +134,7 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildFeatureCards(BuildContext context, String lang) {
+  Widget _buildFeatureCards(BuildContext context, String lang, HomeScreenKeys keys) {
     final features = [
       _FeatureData(
         icon: Icons.folder_special_rounded,
@@ -118,6 +160,7 @@ class HomeScreen extends ConsumerWidget {
     ];
 
     return Column(
+      key: keys.featureCardsKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
@@ -141,6 +184,7 @@ class _QuickActionCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const _QuickActionCard({
+    super.key,
     required this.icon,
     required this.label,
     required this.color,

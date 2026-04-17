@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../core/l10n/app_strings.dart';
@@ -8,6 +9,9 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../../../shared/widgets/section_header.dart';
 import '../../../auth/presentation/auth_notifier.dart';
+import '../../../onboarding/presentation/guided_tour_provider.dart';
+import '../../../onboarding/presentation/screen_keys.dart';
+import '../../../onboarding/presentation/tour_trigger.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -302,6 +306,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final lang = ref.watch(preferredLanguageProvider);
+    final profileKeys = ref.watch(profileScreenKeysProvider);
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -314,6 +319,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             builder: (context, ref, _) {
               final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;
               return IconButton(
+                key: profileKeys.themeToggleKey,
                 tooltip: isDark
                     ? appStr(lang, 'switch_to_light')
                     : appStr(lang, 'switch_to_dark'),
@@ -326,11 +332,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         ],
       ),
-      body: ListView(
+      body: Stack(
+        children: [
+          ListView(
         padding: const EdgeInsets.all(20),
         children: [
           // Personal
-          SectionHeader(title: appStr(lang, 'personal_info')),
+          SectionHeader(key: profileKeys.personalInfoKey, title: appStr(lang, 'personal_info')),
           const SizedBox(height: 12),
           AppTextField(
               controller: _fullNameCtrl, label: appStr(lang, 'full_name')),
@@ -405,7 +413,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: 24),
 
           // Medical History
-          SectionHeader(title: appStr(lang, 'medical_history')),
+          SectionHeader(key: profileKeys.medicalHistoryKey, title: appStr(lang, 'medical_history')),
           const SizedBox(height: 12),
           AppTextField(
             controller: _conditionsCtrl,
@@ -545,9 +553,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: 32),
 
           AppButton(
+            key: profileKeys.saveButtonKey,
             label:
                 _saving ? appStr(lang, 'saving') : appStr(lang, 'save_profile'),
             onPressed: _saving ? null : _save,
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () {
+              // Delay to avoid modifying provider during widget tree build.
+              Future(() {
+                ref.read(guidedTourProvider.notifier).startTour();
+                if (mounted) context.go('/home');
+              });
+            },
+            icon: const Icon(Icons.tour_rounded),
+            label: Text(appStr(lang, 'take_tour')),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary),
+              minimumSize: const Size.fromHeight(48),
+            ),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
@@ -561,6 +587,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 24),
+        ],
+      ),
+          const TourTrigger(phase: TourPhase.profile),
         ],
       ),
     );

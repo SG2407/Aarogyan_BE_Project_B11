@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/l10n/app_strings.dart';
 import '../profile/data/profile_repository.dart';
+import '../onboarding/presentation/guided_tour_provider.dart';
 
 class MainShell extends ConsumerWidget {
   final Widget child;
@@ -37,6 +38,7 @@ class MainShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final lang = ref.watch(preferredLanguageProvider);
     final idx = _currentIndex(context);
+    final navKeys = ref.watch(bottomNavKeysProvider);
     return Scaffold(
       body: child,
       bottomNavigationBar: Container(
@@ -64,6 +66,7 @@ class MainShell extends ConsumerWidget {
                 final selected = i == idx;
                 return Expanded(
                   child: GestureDetector(
+                    key: navKeys[i],
                     onTap: () => context.go(route.$1),
                     behavior: HitTestBehavior.opaque,
                     child: AnimatedContainer(

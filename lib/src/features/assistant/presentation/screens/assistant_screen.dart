@@ -5,6 +5,9 @@ import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/profile/data/profile_repository.dart';
 import '../../data/assistant_repository.dart';
+import '../../../onboarding/presentation/guided_tour_provider.dart';
+import '../../../onboarding/presentation/screen_keys.dart';
+import '../../../onboarding/presentation/tour_trigger.dart';
 
 class AssistantScreen extends ConsumerWidget {
   const AssistantScreen({super.key});
@@ -13,23 +16,29 @@ class AssistantScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final conversations = ref.watch(conversationsListProvider);
     final lang = ref.watch(preferredLanguageProvider);
+    final keys = ref.watch(assistantScreenKeysProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(appStr(lang, 'assistant_title'))),
       floatingActionButton: FloatingActionButton(
+        key: keys.newChatFabKey,
         backgroundColor: AppColors.primary,
         onPressed: () => _startNewChat(context, ref),
         child: const Icon(Icons.add_comment_rounded, color: Colors.white),
       ),
-      body: conversations.when(
+      body: Stack(
+        children: [
+          conversations.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (list) {
           if (list.isEmpty) {
             return _EmptyState(
+                key: keys.chatListKey,
                 lang: lang, onNew: () => _startNewChat(context, ref));
           }
           return ListView.separated(
+            key: keys.chatListKey,
             padding: const EdgeInsets.all(20),
             itemCount: list.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
@@ -49,6 +58,9 @@ class AssistantScreen extends ConsumerWidget {
             },
           );
         },
+      ),
+          const TourTrigger(phase: TourPhase.assistant),
+        ],
       ),
     );
   }
@@ -168,7 +180,7 @@ class _ConversationTile extends StatelessWidget {
 class _EmptyState extends StatelessWidget {
   final String lang;
   final VoidCallback onNew;
-  const _EmptyState({required this.lang, required this.onNew});
+  const _EmptyState({super.key, required this.lang, required this.onNew});
 
   @override
   Widget build(BuildContext context) {

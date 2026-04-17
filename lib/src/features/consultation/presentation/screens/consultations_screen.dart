@@ -6,6 +6,9 @@ import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/profile/data/profile_repository.dart';
 import '../../data/consultation_repository.dart';
+import '../../../onboarding/presentation/guided_tour_provider.dart';
+import '../../../onboarding/presentation/screen_keys.dart';
+import '../../../onboarding/presentation/tour_trigger.dart';
 
 class ConsultationsScreen extends ConsumerWidget {
   const ConsultationsScreen({super.key});
@@ -14,25 +17,31 @@ class ConsultationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final consultationsAsync = ref.watch(consultationsListProvider);
     final lang = ref.watch(preferredLanguageProvider);
+    final keys = ref.watch(consultationsScreenKeysProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(appStr(lang, 'consultations_title'))),
       floatingActionButton: FloatingActionButton.extended(
+        key: keys.newConsultationFabKey,
         onPressed: () => _showCreateDialog(context, ref),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
         label: Text(appStr(lang, 'new_label'),
             style: const TextStyle(color: Colors.white)),
       ),
-      body: consultationsAsync.when(
+      body: Stack(
+        children: [
+          consultationsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (list) {
           if (list.isEmpty) {
             return _EmptyState(
+                key: keys.consultationListKey,
                 lang: lang, onAdd: () => _showCreateDialog(context, ref));
           }
           return ListView.builder(
+            key: keys.consultationListKey,
             padding: const EdgeInsets.all(20),
             itemCount: list.length,
             itemBuilder: (_, i) {
@@ -51,6 +60,9 @@ class ConsultationsScreen extends ConsumerWidget {
             },
           );
         },
+      ),
+          const TourTrigger(phase: TourPhase.consultations),
+        ],
       ),
     );
   }
@@ -269,7 +281,7 @@ class _ConsultationCard extends StatelessWidget {
 class _EmptyState extends StatelessWidget {
   final String lang;
   final VoidCallback onAdd;
-  const _EmptyState({required this.lang, required this.onAdd});
+  const _EmptyState({super.key, required this.lang, required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
